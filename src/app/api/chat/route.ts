@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ALL_MODELS, AVAILABLE_MODELS } from "@/types/game";
-
-const ZENMUX_API_URL = "https://zenmux.ai/api/v1/chat/completions";
-const DASHSCOPE_API_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-const DASHSCOPE_CHAT_COMPLETIONS_URL = `${DASHSCOPE_API_BASE_URL}/chat/completions`;
+import { ALL_MODELS, AVAILABLE_MODELS, type ProviderName } from "@/types/game";
+import { resolveProviderConfig, isOpenAICompatibleProvider } from "@/lib/provider-config";
 
 // API 调用超时时间（毫秒）
 const API_TIMEOUT_MS = 60000;
 
-type Provider = "zenmux" | "dashscope";
-
-function getProviderForModel(model: string): Provider | null {
+function getProviderForModel(model: string): ProviderName | null {
   const modelRef =
     ALL_MODELS.find((ref) => ref.model === model) ??
     AVAILABLE_MODELS.find((ref) => ref.model === model);
@@ -35,10 +30,12 @@ function supportsExplicitCaching(model: string): boolean {
 }
 
 // Models that support multipart message format (content as array)
-function supportsMultipartContent(model: string): boolean {
+function supportsMultipartContent(model: string, provider?: ProviderName): boolean {
+  // Direct-connect providers all accept OpenAI-format multipart content
+  if (provider && isOpenAICompatibleProvider(provider)) return true;
   if (!model) return false;
   const lower = model.toLowerCase();
-  // Known models that support multipart content
+  // Known models that support multipart content (via zenmux/dashscope routing)
   if (lower.startsWith("openai/")) return true;
   if (lower.startsWith("google/")) return true;
   if (lower.startsWith("anthropic/")) return true;
@@ -50,11 +47,12 @@ function supportsMultipartContent(model: string): boolean {
 }
 
 // Models that support response_format parameter
-// Per ZenMux docs: check model card for response_format support
-function supportsResponseFormat(model: string): boolean {
+function supportsResponseFormat(model: string, provider?: ProviderName): boolean {
+  // Direct-connect providers all support response_format
+  if (provider && isOpenAICompatibleProvider(provider)) return true;
   if (!model) return false;
   const lower = model.toLowerCase();
-  // Known supported models
+  // Known supported models (via zenmux routing)
   if (lower.startsWith("openai/")) return true;
   if (lower.startsWith("google/")) return true;
   if (lower.startsWith("anthropic/")) return true;
@@ -174,8 +172,32 @@ type ChatRequestPayload = {
   reasoning?: ReasoningPayload;
   reasoning_effort?: "minimal" | "low" | "medium" | "high";
   response_format?: unknown;
-  provider?: Provider;
+  provider?: ProviderName;
 };
+
+/**
+ * Generic helper for any OpenAI-compatible endpoint
+ * (openai, google, anthropic, openai-compatible).
+ * Returns the raw fetch Response so the caller can handle stream vs JSON.
+ */
+async function fetchOpenAICompatible(
+  endpoint: string,
+  apiKey: string,
+  extraHeaders: Record<string, string> | undefined,
+  body: Record<string, unknown>,
+  signal: AbortSignal
+): Promise<Response> {
+  return fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
 
 async function runBatchItem(
   payload: ChatRequestPayload,
@@ -198,13 +220,15 @@ async function runBatchItem(
     return { ok: false, status: 400, error: "Batch request does not support stream=true" };
   }
 
-  const modelProvider: Provider | null =
-    provider === "dashscope" || provider === "zenmux" ? provider : getProviderForModel(model);
+  const modelProvider: ProviderName | null = provider ?? getProviderForModel(model);
   if (!modelProvider) {
     return { ok: false, status: 400, error: `Unknown model: ${String(model ?? "").trim() || "unknown"}` };
   }
 
   const isDefaultModel = AVAILABLE_MODELS.some((ref) => ref.model === model);
+  const hasAnyCustomKeyHeader = Boolean((headerApiKey ?? "").trim() || (headerDashscopeKey ?? "").trim());
+
+  // For legacy providers (zenmux/dashscope), enforce user key requirements
   if (!isDefaultModel) {
     if (modelProvider === "zenmux" && !headerApiKey) {
       return { ok: false, status: 401, error: "此模型需要您提供 Zenmux API Key" };
@@ -214,35 +238,34 @@ async function runBatchItem(
     }
   }
 
-  const hasAnyCustomKeyHeader = Boolean((headerApiKey ?? "").trim() || (headerDashscopeKey ?? "").trim());
-
   const modelRefOverride = getModelRef(model);
   const normalizedTemperature =
     modelRefOverride?.temperature !== undefined
       ? modelRefOverride.temperature
       : (typeof temperature === "number" && Number.isFinite(temperature) ? temperature : 0.7);
+  // ZenMux and Moonshot/Kimi require temperature in [0, 1]; other providers allow up to 2
   const cappedTemperature = (() => {
     const lower = typeof model === "string" ? model.toLowerCase() : "";
     const needZeroOne =
       modelProvider === "zenmux" ||
       lower.startsWith("moonshotai/") ||
       lower.includes("kimi");
-    if (needZeroOne) {
-      return Math.min(Math.max(0, normalizedTemperature), 1);
-    }
+    if (needZeroOne) return Math.min(Math.max(0, normalizedTemperature), 1);
     return Math.max(0, normalizedTemperature);
   })();
   const effectiveReasoning = modelRefOverride?.reasoning !== undefined ? modelRefOverride.reasoning : reasoning;
 
   let processedMessages: unknown[] = messages;
-  if (!supportsMultipartContent(model)) {
+  if (!supportsMultipartContent(model, modelProvider)) {
     processedMessages = flattenMultipartContent(processedMessages);
-  } else if (modelProvider === "dashscope") {
+  } else if (modelProvider === "dashscope" || isOpenAICompatibleProvider(modelProvider)) {
+    // Dashscope and direct-connect providers use OpenAI-compat but don't understand cache_control
     processedMessages = stripCacheControl(processedMessages);
   } else if (!supportsExplicitCaching(model)) {
     processedMessages = stripCacheControl(processedMessages);
   }
 
+  // ── DashScope ────────────────────────────────────────────────────────────────
   if (modelProvider === "dashscope") {
     if (hasAnyCustomKeyHeader && !headerDashscopeKey) {
       return { ok: false, status: 401, error: "已启用自定义 Key，但未提供百炼 API Key（已拒绝回退到系统 Key）" };
@@ -251,85 +274,93 @@ async function runBatchItem(
     if (!dashscopeApiKey) {
       return { ok: false, status: 500, error: "DASHSCOPE_API_KEY not configured on server" };
     }
-
+    const cfg = resolveProviderConfig("dashscope");
     const normalizedModel = normalizeDashscopeModelName(model);
     const normalizedResponseFormat = response_format as { type?: unknown } | undefined;
     const dashscopeMessages =
       normalizedResponseFormat?.type === "json_object"
         ? withDashscopeJsonHint(processedMessages)
         : processedMessages;
-
     const requestBody: Record<string, unknown> = {
       model: normalizedModel,
       messages: dashscopeMessages,
       temperature: cappedTemperature,
     };
-
     if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
       requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
     }
-
-    if (response_format) {
-      requestBody.response_format = response_format;
-    }
-
+    if (response_format) requestBody.response_format = response_format;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
     let response: Response;
     try {
-      response = await fetch(DASHSCOPE_CHAT_COMPLETIONS_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${dashscopeApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      response = await fetchOpenAICompatible(cfg.endpoint, dashscopeApiKey, undefined, requestBody, controller.signal);
     } finally {
       clearTimeout(timeoutId);
     }
-
     if (!response.ok) {
       const errorText = await response.text();
-      let parsed: unknown = undefined;
-      try {
-        parsed = JSON.parse(errorText);
-      } catch {
-        // ignore
-      }
-      return {
-        ok: false,
-        status: response.status,
-        error: `DashScope API error: ${response.status}`,
-        details: parsed ?? errorText,
-      };
+      let parsed: unknown;
+      try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
+      return { ok: false, status: response.status, error: `DashScope API error: ${response.status}`, details: parsed ?? errorText };
     }
-
-    const result = await response.json();
-    return { ok: true, data: result };
+    return { ok: true, data: await response.json() };
   }
 
+  // ── OpenAI / Google / Anthropic / openai-compatible ──────────────────────────
+  if (isOpenAICompatibleProvider(modelProvider)) {
+    const cfg = resolveProviderConfig(modelProvider);
+    if (!cfg.configured) {
+      return { ok: false, status: 500, error: `${modelProvider.toUpperCase()}_API_KEY not configured on server` };
+    }
+    if (!cfg.endpoint) {
+      return { ok: false, status: 500, error: `Endpoint URL not configured for provider: ${modelProvider}` };
+    }
+    const requestBody: Record<string, unknown> = {
+      model,
+      messages: processedMessages,
+      temperature: cappedTemperature,
+    };
+    if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
+      requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
+    }
+    if (response_format && supportsResponseFormat(model, modelProvider)) {
+      requestBody.response_format = response_format;
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetchOpenAICompatible(cfg.endpoint, cfg.apiKey, cfg.extraHeaders, requestBody, controller.signal);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      let parsed: unknown;
+      try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
+      return { ok: false, status: response.status, error: `${modelProvider} API error: ${response.status}`, details: parsed ?? errorText };
+    }
+    return { ok: true, data: await response.json() };
+  }
+
+  // ── ZenMux (default) ─────────────────────────────────────────────────────────
   if (hasAnyCustomKeyHeader && !headerApiKey) {
     return { ok: false, status: 401, error: "已启用自定义 Key，但未提供 Zenmux API Key（已拒绝回退到系统 Key）" };
   }
-
   const apiKey = headerApiKey || process.env.ZENMUX_API_KEY;
   if (!apiKey) {
     return { ok: false, status: 500, error: "ZENMUX_API_KEY not configured on server" };
   }
-
+  const zenmuxCfg = resolveProviderConfig("zenmux");
   const requestBody: Record<string, unknown> = {
     model,
     messages: processedMessages,
     temperature: cappedTemperature,
   };
-
   if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
     requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
   }
-
   const reasoningEffort = isReasoningEffort(reasoning_effort) ? reasoning_effort : undefined;
   const reasoningToUse = effectiveReasoning ?? reasoning;
   if (reasoningToUse !== undefined) {
@@ -339,40 +370,22 @@ async function runBatchItem(
   } else {
     requestBody.reasoning = { enabled: false };
   }
-
   if (response_format && supportsResponseFormat(model)) {
     requestBody.response_format = response_format;
   }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
   let response: Response;
   try {
-    response = await fetch(ZENMUX_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    response = await fetchOpenAICompatible(zenmuxCfg.endpoint, apiKey, undefined, requestBody, controller.signal);
   } finally {
     clearTimeout(timeoutId);
   }
-
   if (!response.ok) {
     const errorText = await response.text();
-    return {
-      ok: false,
-      status: response.status,
-      error: `ZenMux API error: ${response.status} - ${errorText}`,
-    };
+    return { ok: false, status: response.status, error: `ZenMux API error: ${response.status} - ${errorText}` };
   }
-
-  const result = await response.json();
-  return { ok: true, data: result };
+  return { ok: true, data: await response.json() };
 }
 
 export async function POST(request: NextRequest) {
@@ -398,10 +411,8 @@ export async function POST(request: NextRequest) {
       response_format,
       provider,
     } = body;
-    const modelProvider: Provider | null =
-      provider === "dashscope" || provider === "zenmux" ? provider : getProviderForModel(model);
+    const modelProvider: ProviderName | null = provider ?? getProviderForModel(model);
     if (!modelProvider) {
-      // Reject unknown models early to avoid mis-routing.
       return NextResponse.json(
         { error: `Unknown model: ${String(model ?? "").trim() || "unknown"}` },
         { status: 400 }
@@ -417,49 +428,39 @@ export async function POST(request: NextRequest) {
       modelRefOverride?.temperature !== undefined
         ? modelRefOverride.temperature
         : (typeof temperature === "number" && Number.isFinite(temperature) ? temperature : 0.7);
-    // ZenMux requires temperature in 0..1; Moonshot/Kimi also
+    // ZenMux and Moonshot/Kimi require temperature in [0, 1]; other providers allow up to 2
     const cappedTemperature = (() => {
       const lower = typeof model === "string" ? model.toLowerCase() : "";
       const needZeroOne =
         modelProvider === "zenmux" ||
         lower.startsWith("moonshotai/") ||
         lower.includes("kimi");
-      if (needZeroOne) {
-        return Math.min(Math.max(0, normalizedTemperature), 1);
-      }
+      if (needZeroOne) return Math.min(Math.max(0, normalizedTemperature), 1);
       return Math.max(0, normalizedTemperature);
     })();
     const effectiveReasoning = modelRefOverride?.reasoning !== undefined ? modelRefOverride.reasoning : reasoning;
 
-    // Process messages based on model capabilities
     let processedMessages = messages;
-
-    // For models that don't support multipart content, flatten to string
-    if (!supportsMultipartContent(model)) {
+    if (!supportsMultipartContent(model, modelProvider)) {
       processedMessages = flattenMultipartContent(processedMessages);
-    } else if (modelProvider === "dashscope") {
-      // Dashscope is OpenAI compatible but does not support cache_control
+    } else if (modelProvider === "dashscope" || isOpenAICompatibleProvider(modelProvider)) {
+      // Dashscope and direct-connect providers use OpenAI-compat but don't understand cache_control
       processedMessages = stripCacheControl(processedMessages);
     } else if (!supportsExplicitCaching(model)) {
-      // For models that support multipart but not cache_control, strip cache_control
       processedMessages = stripCacheControl(processedMessages);
     }
 
+    // For legacy providers (zenmux/dashscope), enforce user key requirements on non-default models
     if (!isDefaultModel) {
       if (modelProvider === "zenmux" && !headerApiKey) {
-        return NextResponse.json(
-          { error: "此模型需要您提供 Zenmux API Key" },
-          { status: 401 }
-        );
+        return NextResponse.json({ error: "此模型需要您提供 Zenmux API Key" }, { status: 401 });
       }
       if (modelProvider === "dashscope" && !headerDashscopeKey) {
-        return NextResponse.json(
-          { error: "此模型需要您提供百炼 API Key" },
-          { status: 401 }
-        );
+        return NextResponse.json({ error: "此模型需要您提供百炼 API Key" }, { status: 401 });
       }
     }
 
+    // ── DashScope ──────────────────────────────────────────────────────────────
     if (modelProvider === "dashscope") {
       if (hasAnyCustomKeyHeader && !headerDashscopeKey) {
         return NextResponse.json(
@@ -467,17 +468,11 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
-
       const dashscopeApiKey = headerDashscopeKey || process.env.DASHSCOPE_API_KEY;
       if (!dashscopeApiKey) {
-        return NextResponse.json(
-          { error: "DASHSCOPE_API_KEY not configured on server" },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "DASHSCOPE_API_KEY not configured on server" }, { status: 500 });
       }
-
-      const dashscopeApiUrl = DASHSCOPE_CHAT_COMPLETIONS_URL;
-
+      const cfg = resolveProviderConfig("dashscope");
       const normalizedModel = normalizeDashscopeModelName(model);
       const normalizedResponseFormat = response_format as { type?: unknown } | undefined;
       const dashscopeMessages =
@@ -489,97 +484,114 @@ export async function POST(request: NextRequest) {
         messages: dashscopeMessages,
         temperature: cappedTemperature,
       };
-
       if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
         requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
       }
-
-      if (stream) {
-        requestBody.stream = true;
-      }
-
-      if (response_format) {
-        requestBody.response_format = response_format;
-      }
+      if (stream) requestBody.stream = true;
+      if (response_format) requestBody.response_format = response_format;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
       let response: Response;
       try {
-        response = await fetch(dashscopeApiUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${dashscopeApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        });
+        response = await fetchOpenAICompatible(cfg.endpoint, dashscopeApiKey, undefined, requestBody, controller.signal);
       } finally {
         clearTimeout(timeoutId);
       }
-
       if (!response.ok) {
         const errorText = await response.text();
-        let parsed: unknown = undefined;
-        try {
-          parsed = JSON.parse(errorText);
-        } catch {
-          // ignore
-        }
+        let parsed: unknown;
+        try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
         return NextResponse.json(
-          {
-            error: `DashScope API error: ${response.status}`,
-            details: parsed ?? errorText,
-          },
+          { error: `DashScope API error: ${response.status}`, details: parsed ?? errorText },
           { status: response.status }
         );
       }
-
       if (stream) {
-        // For streaming responses, forward the stream
         const headers = new Headers();
         headers.set("Content-Type", "text/event-stream");
         headers.set("Cache-Control", "no-cache");
         headers.set("Connection", "keep-alive");
-
         return new Response(response.body, { headers });
       }
-
-      const result = await response.json();
-      return NextResponse.json(result);
+      return NextResponse.json(await response.json());
     }
 
+    // ── OpenAI / Google / Anthropic / openai-compatible ────────────────────────
+    if (isOpenAICompatibleProvider(modelProvider)) {
+      const cfg = resolveProviderConfig(modelProvider);
+      if (!cfg.configured) {
+        return NextResponse.json(
+          { error: `${modelProvider.toUpperCase().replace(/-/g, "_")}_API_KEY not configured on server` },
+          { status: 500 }
+        );
+      }
+      if (!cfg.endpoint) {
+        return NextResponse.json(
+          { error: `Endpoint URL not configured for provider: ${modelProvider}` },
+          { status: 500 }
+        );
+      }
+      const requestBody: Record<string, unknown> = {
+        model,
+        messages: processedMessages,
+        temperature: cappedTemperature,
+      };
+      if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
+        requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
+      }
+      if (stream) requestBody.stream = true;
+      if (response_format && supportsResponseFormat(model, modelProvider)) {
+        requestBody.response_format = response_format;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetchOpenAICompatible(cfg.endpoint, cfg.apiKey, cfg.extraHeaders, requestBody, controller.signal);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      if (!response.ok) {
+        const errorText = await response.text();
+        let parsed: unknown;
+        try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
+        return NextResponse.json(
+          { error: `${modelProvider} API error: ${response.status}`, details: parsed ?? errorText },
+          { status: response.status }
+        );
+      }
+      if (stream) {
+        const headers = new Headers();
+        headers.set("Content-Type", "text/event-stream");
+        headers.set("Cache-Control", "no-cache");
+        headers.set("Connection", "keep-alive");
+        return new Response(response.body, { headers });
+      }
+      return NextResponse.json(await response.json());
+    }
+
+    // ── ZenMux (default) ───────────────────────────────────────────────────────
     if (hasAnyCustomKeyHeader && !headerApiKey) {
       return NextResponse.json(
         { error: "已启用自定义 Key，但未提供 Zenmux API Key（已拒绝回退到系统 Key）" },
         { status: 401 }
       );
     }
-
     const apiKey = headerApiKey || process.env.ZENMUX_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "ZENMUX_API_KEY not configured on server" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "ZENMUX_API_KEY not configured on server" }, { status: 500 });
     }
-
+    const zenmuxCfg = resolveProviderConfig("zenmux");
     const requestBody: Record<string, unknown> = {
       model,
       messages: processedMessages,
       temperature: cappedTemperature,
     };
-
     if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
       requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
     }
-
-    if (stream) {
-      requestBody.stream = true;
-    }
-
+    if (stream) requestBody.stream = true;
     const reasoningEffort = isReasoningEffort(reasoning_effort) ? reasoning_effort : undefined;
     const reasoningToUse = effectiveReasoning ?? reasoning;
     if (reasoningToUse !== undefined) {
@@ -589,30 +601,17 @@ export async function POST(request: NextRequest) {
     } else {
       requestBody.reasoning = { enabled: false };
     }
-
-    // Only include response_format for models that support it
     if (response_format && supportsResponseFormat(model)) {
       requestBody.response_format = response_format;
     }
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
     let response: Response;
     try {
-      response = await fetch(ZENMUX_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      response = await fetchOpenAICompatible(zenmuxCfg.endpoint, apiKey, undefined, requestBody, controller.signal);
     } finally {
       clearTimeout(timeoutId);
     }
-
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json(
@@ -620,19 +619,14 @@ export async function POST(request: NextRequest) {
         { status: response.status }
       );
     }
-
     if (stream) {
-      // For streaming responses, forward the stream
       const headers = new Headers();
       headers.set("Content-Type", "text/event-stream");
       headers.set("Cache-Control", "no-cache");
       headers.set("Connection", "keep-alive");
-
       return new Response(response.body, { headers });
     }
-
-    const result = await response.json();
-    return NextResponse.json(result);
+    return NextResponse.json(await response.json());
   } catch (error) {
     console.error("[api/chat] Error:", error);
     return NextResponse.json(

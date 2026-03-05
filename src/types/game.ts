@@ -65,13 +65,30 @@ export type Alignment = "village" | "wolf";
    rolesHint: string;
  }
 
+/**
+ * Provider identifiers:
+ * - "zenmux"            – ZenMux aggregator (https://zenmux.ai)
+ * - "dashscope"         – Alibaba Cloud DashScope / Bailian
+ * - "openai"            – OpenAI direct (configurable via OPENAI_BASE_URL)
+ * - "google"            – Google Gemini OpenAI-compat endpoint
+ * - "anthropic"         – Anthropic direct (OpenAI-compat)
+ * - "openai-compatible" – Any third-party OpenAI-compatible service (OPENAI_COMPATIBLE_BASE_URL / OPENAI_COMPATIBLE_API_KEY)
+ */
+export type ProviderName =
+  | "zenmux"
+  | "dashscope"
+  | "openai"
+  | "google"
+  | "anthropic"
+  | "openai-compatible";
+
 export interface ModelRef {
-  provider: "zenmux" | "dashscope";
+  provider: ProviderName;
   model: string;
   /** Override call-time temperature for this model (e.g. some models only support 1) */
   temperature?: number;
   /** Override call-time reasoning/thinking for this model (e.g. some models must enable it) */
-  reasoning?: { enabled: boolean, exclude?: boolean,effort?: "minimal" | "low" | "medium" | "high" };
+  reasoning?: { enabled: boolean, exclude?: boolean, effort?: "minimal" | "low" | "medium" | "high" };
 }
 
 export interface Persona {
@@ -279,20 +296,56 @@ export const ALL_MODELS: ModelRef[] = [
   { provider: "dashscope", model: "qwen-plus-2025-12-01" },
   { provider: "dashscope", model: "qwen3-max" },
 
-  // Zenmux models
+  // Zenmux models — OpenAI
+  { provider: "zenmux", model: "openai/gpt-5.2" },           // flagship (2026-03)
+  { provider: "zenmux", model: "openai/gpt-5.2-pro" },       // smarter/more precise
+  { provider: "zenmux", model: "openai/gpt-5.2-chat" },      // ChatGPT-variant
+  { provider: "zenmux", model: "openai/gpt-5-mini" },        // fast & cost-efficient
+  { provider: "zenmux", model: "openai/gpt-5-nano" },        // fastest / cheapest
+  { provider: "zenmux", model: "openai/gpt-4.1" },           // smartest non-reasoning
+
+  // Zenmux models — Google Gemini
+  { provider: "zenmux", model: "google/gemini-3.1-pro-preview" },       // latest Gemini 3 Pro
+  { provider: "zenmux", model: "google/gemini-3-flash-preview" },       // frontier-class Flash
+  { provider: "zenmux", model: "google/gemini-3.1-flash-lite-preview" },// lightweight Flash Lite
+  { provider: "zenmux", model: "google/gemini-2.5-pro" },               // stable Pro
+  { provider: "zenmux", model: "google/gemini-2.5-flash" },             // stable Flash
+  { provider: "zenmux", model: "google/gemini-2.5-flash-lite" },        // stable Flash-Lite
+
+  // Zenmux models — Anthropic Claude
+  { provider: "zenmux", model: "anthropic/claude-opus-4-6" },   // latest Opus (2026-03)
+  { provider: "zenmux", model: "anthropic/claude-sonnet-4-6" }, // latest Sonnet (2026-03)
+  { provider: "zenmux", model: "anthropic/claude-haiku-4-5" },  // latest Haiku
+
+  // Zenmux models — Others
   { provider: "zenmux", model: "deepseek/deepseek-v3.2" },
-  { provider: "zenmux", model: "google/gemini-3-flash-preview" },
   { provider: "zenmux", model: "moonshotai/kimi-k2-0905" },
   { provider: "zenmux", model: "qwen/qwen3-max" },
   { provider: "zenmux", model: "volcengine/doubao-seed-1.8" },
-  { provider: "zenmux", model: "google/gemini-2.5-flash-lite" },
-  { provider: "zenmux", model: "openai/gpt-5.2-chat" },
-  { provider: "zenmux", model: "anthropic/claude-haiku-4.5" },
-  { provider: "zenmux", model: "anthropic/claude-sonnet-4.5" },
-  { provider: "zenmux", model: "anthropic/claude-opus-4.5" },
   { provider: "zenmux", model: "x-ai/grok-4" },
-  { provider: "zenmux", model: "google/gemini-3-pro-preview" },
   { provider: "zenmux", model: "z-ai/glm-4.7", temperature: 1 , reasoning: { enabled: false } },
   { provider: "zenmux", model: "minimax/minimax-m2.1", temperature: 1 , reasoning: { enabled: false } },
+
+  // OpenAI direct connect (requires OPENAI_API_KEY)
+  { provider: "openai", model: "gpt-5.2" },      // flagship (2026-03)
+  { provider: "openai", model: "gpt-5.2-pro" },  // smarter/more precise
+  { provider: "openai", model: "gpt-5-mini" },   // fast & cost-efficient
+  { provider: "openai", model: "gpt-5-nano" },   // fastest / cheapest
+  { provider: "openai", model: "gpt-4.1" },      // smartest non-reasoning
+
+  // Google direct connect via OpenAI-compat (requires GOOGLE_API_KEY)
+  { provider: "google", model: "gemini-3.1-pro-preview" },        // latest Gemini 3 Pro
+  { provider: "google", model: "gemini-3-flash-preview" },        // frontier-class Flash
+  { provider: "google", model: "gemini-3.1-flash-lite-preview" }, // lightweight Flash Lite
+  { provider: "google", model: "gemini-2.5-pro" },                // stable Pro
+  { provider: "google", model: "gemini-2.5-flash" },              // stable Flash
+
+  // Anthropic direct connect via OpenAI-compat (requires ANTHROPIC_API_KEY)
+  { provider: "anthropic", model: "claude-opus-4-6" },   // latest Opus (2026-03)
+  { provider: "anthropic", model: "claude-sonnet-4-6" }, // latest Sonnet (2026-03)
+  { provider: "anthropic", model: "claude-haiku-4-5" },  // latest Haiku
+
+  // OpenAI-compatible third-party (requires OPENAI_COMPATIBLE_BASE_URL + OPENAI_COMPATIBLE_API_KEY)
+  // { provider: "openai-compatible", model: "your-model-name" },
 ];
 

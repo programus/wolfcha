@@ -1,5 +1,5 @@
 import { getDashscopeApiKey, getZenmuxApiKey, isCustomKeyEnabled } from "@/lib/api-keys";
-import { ALL_MODELS, AVAILABLE_MODELS, type ModelRef } from "@/types/game";
+import { ALL_MODELS, AVAILABLE_MODELS, type ModelRef, type ProviderName } from "@/types/game";
 import { gameStatsTracker } from "@/hooks/useGameStats";
 import { gameSessionTracker } from "@/lib/game-session-tracker";
 
@@ -16,9 +16,9 @@ export interface LLMMessage {
   reasoning_details?: unknown;
 }
 
-type Provider = "zenmux" | "dashscope";
+type Provider = ProviderName;
 
-function getProviderForModel(model: string): Provider {
+function getProviderForModel(model: string): ProviderName {
    const modelRef =
      ALL_MODELS.find((ref) => ref.model === model) ??
      AVAILABLE_MODELS.find((ref) => ref.model === model);
@@ -41,10 +41,16 @@ export function resolveApiKeySource(model: string): ApiKeySource {
    if (!customEnabled) return "project";
 
    const provider = getProviderForModel(model);
+   // New direct-connect providers (openai, google, anthropic, openai-compatible) are
+   // server-side only — their keys are never stored client-side.
    if (provider === "dashscope") {
      return getDashscopeApiKey() ? "user" : "project";
    }
-   return getZenmuxApiKey() ? "user" : "project";
+   if (provider === "zenmux") {
+     return getZenmuxApiKey() ? "user" : "project";
+   }
+   // openai / google / anthropic / openai-compatible → always project key
+   return "project";
  }
 
 export interface ChatCompletionResponse {
@@ -684,8 +690,11 @@ export async function generateJSON<T>(
     }
   }
 
+  // Force response_format: json_object for providers that support it natively
+  // (all except dashscope, which uses a message-hint approach in route.ts)
+  const provider = getProviderForModel(options.model);
   const shouldForceJsonObject =
-    !options.response_format && getProviderForModel(options.model) === "zenmux";
+    !options.response_format && provider !== "dashscope";
 
   const result = await generateCompletion({
     ...options,

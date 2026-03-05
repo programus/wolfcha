@@ -1,4 +1,4 @@
-import { ALL_MODELS, AVAILABLE_MODELS, GENERATOR_MODEL, SUMMARY_MODEL, REVIEW_MODEL } from "@/types/game";
+import { ALL_MODELS, AVAILABLE_MODELS, GENERATOR_MODEL, SUMMARY_MODEL, REVIEW_MODEL, type ProviderName } from "@/types/game";
 
 const ZENMUX_API_KEY_STORAGE = "wolfcha_zenmux_api_key";
 const DASHSCOPE_API_KEY_STORAGE = "wolfcha_dashscope_api_key";
@@ -101,10 +101,17 @@ function resolveDefaultModelWhenCustomDisabled(fallbackDefault: string): string 
 }
 
 // When custom key is enabled, keep model within providers that have keys.
+// Note: openai/google/anthropic/openai-compatible are server-side only and are
+// always considered available when custom key mode is on.
 function resolveModelWhenCustomEnabled(preferred: string, fallbackPreferred: string): string {
-  const allowedProviders = new Set<"zenmux" | "dashscope">();
+  const allowedProviders = new Set<ProviderName>();
   if (hasZenmuxKey()) allowedProviders.add("zenmux");
   if (hasDashscopeKey()) allowedProviders.add("dashscope");
+  // Server-side providers are always available (key managed via env vars, not user input)
+  allowedProviders.add("openai");
+  allowedProviders.add("google");
+  allowedProviders.add("anthropic");
+  allowedProviders.add("openai-compatible");
 
   if (allowedProviders.size === 0) return preferred;
 
