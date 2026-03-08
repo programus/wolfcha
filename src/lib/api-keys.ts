@@ -11,6 +11,8 @@ const SUMMARY_MODEL_STORAGE = "wolfcha_summary_model";
 const REVIEW_MODEL_STORAGE = "wolfcha_review_model";
 const VALIDATED_ZENMUX_KEY_STORAGE = "wolfcha_validated_zenmux_key";
 const VALIDATED_DASHSCOPE_KEY_STORAGE = "wolfcha_validated_dashscope_key";
+/** Project-level player model selection (no user API key required). */
+const PLAYER_MODEL_SELECTION_STORAGE = "wolfcha_player_model_selection";
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -184,11 +186,47 @@ export function setSelectedModels(models: string[]) {
 // Deprecated Zenmux model ID that no longer exists; migrate to valid one
 const DEPRECATED_GENERATOR_MODEL = "google/gemini-2.5-flash-lite-preview-09-2025";
 
+/** Returns true if the model belongs to a server-direct provider (openai/google/anthropic/openai-compatible).
+ *  These providers use server env var keys and are always available regardless of client-side custom key state.
+ */
+function isServerDirectModel(model: string): boolean {
+  const ref = ALL_MODELS.find((r) => r.model === model);
+  return (
+    ref != null &&
+    (ref.provider === "openai" ||
+      ref.provider === "google" ||
+      ref.provider === "anthropic" ||
+      ref.provider === "openai-compatible")
+  );
+}
+
+/**
+ * When custom key is disabled but only server-direct providers are available
+ * (e.g. only OPENAI_API_KEY is set), derive a usable model from the player selection
+ * so that utility calls (generation/summary/review) also route to a working provider.
+ */
+function findServerDirectFallback(): string | null {
+  const playerSelection = getPlayerModelSelection();
+  for (const m of playerSelection) {
+    if (isServerDirectModel(m)) return m;
+    // Dynamic models (not in any built-in list) are openai-compatible and use server env keys
+    if (!ALL_MODELS.some((r) => r.model === m)) return m;
+  }
+  return null;
+}
+
 export function getGeneratorModel(): string {
-  // When custom key is disabled, always use GENERATOR_MODEL directly
-  // (independent of AI player models in AVAILABLE_MODELS)
   if (!isCustomKeyEnabled()) {
-    return GENERATOR_MODEL;
+    // Honor an explicitly stored server-direct model (supports server-only deployments).
+    const stored = readStorage(GENERATOR_MODEL_STORAGE);
+    if (stored && stored !== DEPRECATED_GENERATOR_MODEL) {
+      if (isServerDirectModel(stored)) return stored;
+      // Dynamic model (not in any built-in list) → openai-compatible, server-managed key
+      if (!ALL_MODELS.some((r) => r.model === stored)) return stored;
+    }
+    // Fall back to a server-direct model from the player selection when built-in providers
+    // (DashScope/Zenmux) are not configured on the server.
+    return findServerDirectFallback() ?? GENERATOR_MODEL;
   }
   const stored = readStorage(GENERATOR_MODEL_STORAGE);
   if (stored === DEPRECATED_GENERATOR_MODEL) {
@@ -203,10 +241,14 @@ export function setGeneratorModel(model: string) {
 }
 
 export function getSummaryModel(): string {
-  // When custom key is disabled, always use SUMMARY_MODEL directly
-  // (independent of AI player models in AVAILABLE_MODELS)
   if (!isCustomKeyEnabled()) {
-    return SUMMARY_MODEL;
+    // Honor an explicitly stored server-direct model.
+    const stored = readStorage(SUMMARY_MODEL_STORAGE);
+    if (stored && stored !== DEPRECATED_GENERATOR_MODEL) {
+      if (isServerDirectModel(stored)) return stored;
+      if (!ALL_MODELS.some((r) => r.model === stored)) return stored;
+    }
+    return findServerDirectFallback() ?? SUMMARY_MODEL;
   }
   const stored = readStorage(SUMMARY_MODEL_STORAGE);
   if (stored === DEPRECATED_GENERATOR_MODEL) {
@@ -221,9 +263,14 @@ export function setSummaryModel(model: string) {
 }
 
 export function getReviewModel(): string {
-  // When custom key is disabled, always use REVIEW_MODEL directly
   if (!isCustomKeyEnabled()) {
-    return REVIEW_MODEL;
+    // Honor an explicitly stored server-direct model.
+    const stored = readStorage(REVIEW_MODEL_STORAGE);
+    if (stored) {
+      if (isServerDirectModel(stored)) return stored;
+      if (!ALL_MODELS.some((r) => r.model === stored)) return stored;
+    }
+    return findServerDirectFallback() ?? REVIEW_MODEL;
   }
   const stored = readStorage(REVIEW_MODEL_STORAGE);
   return resolveModelForCurrentKeyState(stored, REVIEW_MODEL, REVIEW_MODEL_STORAGE);
@@ -231,6 +278,34 @@ export function getReviewModel(): string {
 
 export function setReviewModel(model: string) {
   writeStorage(REVIEW_MODEL_STORAGE, model);
+}
+
+/**
+ * Project-level player model selection (used when custom key is NOT enabled).
+ * Stores model strings selected by the user in the Model Settings panel.
+ * An empty array means "use all available models from enabled providers".
+ */
+export function getPlayerModelSelection(): string[] {
+  if (!canUseStorage()) return [];
+  const raw = window.localStorage.getItem(PLAYER_MODEL_SELECTION_STORAGE);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => String(item ?? "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export function setPlayerModelSelection(models: string[]) {
+  if (!canUseStorage()) return;
+  const normalized = models.map((m) => String(m ?? "").trim()).filter(Boolean);
+  if (normalized.length === 0) {
+    window.localStorage.removeItem(PLAYER_MODEL_SELECTION_STORAGE);
+    return;
+  }
+  window.localStorage.setItem(PLAYER_MODEL_SELECTION_STORAGE, JSON.stringify(normalized));
 }
 
 export function clearApiKeys() {
@@ -246,6 +321,7 @@ export function clearApiKeys() {
   window.localStorage.removeItem(REVIEW_MODEL_STORAGE);
   window.localStorage.removeItem(VALIDATED_ZENMUX_KEY_STORAGE);
   window.localStorage.removeItem(VALIDATED_DASHSCOPE_KEY_STORAGE);
+  window.localStorage.removeItem(PLAYER_MODEL_SELECTION_STORAGE);
 }
 
 export interface KeyValidationResult {

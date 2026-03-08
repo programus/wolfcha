@@ -1,157 +1,151 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import type { CustomCharacter, CustomCharacterInput } from "@/types/custom-character";
-import { DEFAULT_CUSTOM_CHARACTER_AGE, DEFAULT_CUSTOM_CHARACTER_GENDER, MAX_CUSTOM_CHARACTERS } from "@/types/custom-character";
-import type { User } from "@supabase/supabase-js";
+import {
+  DEFAULT_CUSTOM_CHARACTER_AGE,
+  DEFAULT_CUSTOM_CHARACTER_GENDER,
+  MAX_CUSTOM_CHARACTERS,
+} from "@/types/custom-character";
 import { fillCustomCharacterOptionalFields } from "@/lib/custom-character-defaults";
 
-export function useCustomCharacters(user: User | null) {
+const STORAGE_KEY = "wolfcha:custom_characters";
+
+function loadFromStorage(): CustomCharacter[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as CustomCharacter[];
+  } catch {
+    return [];
+  }
+}
+
+function saveToStorage(chars: CustomCharacter[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(chars));
+}
+
+export function useCustomCharacters() {
   const [characters, setCharacters] = useState<CustomCharacter[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCharacters = useCallback(async () => {
-    if (!user) {
-      setCharacters([]);
-      return;
-    }
-
     setLoading(true);
     setError(null);
+    setCharacters(loadFromStorage());
+    setLoading(false);
+  }, []);
 
-    try {
-      const { data, error: fetchError } = await supabase
-        .from("custom_characters")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_deleted", false)
-        .order("created_at", { ascending: false });
+  const createCharacter = useCallback(
+    async (input: CustomCharacterInput): Promise<CustomCharacter | null> => {
+      const current = loadFromStorage();
+      if (current.length >= MAX_CUSTOM_CHARACTERS) {
+        setError(`Maximum ${MAX_CUSTOM_CHARACTERS} custom characters allowed`);
+        return null;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const normalized = fillCustomCharacterOptionalFields(input);
+        const now = new Date().toISOString();
+        const newChar: CustomCharacter = {
+          id: crypto.randomUUID(),
+          user_id: "local",
+          display_name: normalized.display_name.trim(),
+          gender: normalized.gender,
+          age: normalized.age,
+          mbti: normalized.mbti.toUpperCase(),
+          basic_info: normalized.basic_info?.trim() || undefined,
+          style_label: normalized.style_label?.trim() || undefined,
+          avatar_seed: input.avatar_seed || `${input.display_name}-${Date.now()}`,
+          is_deleted: false,
+          created_at: now,
+          updated_at: now,
+        };
+        const updated = [newChar, ...current];
+        saveToStorage(updated);
+        setCharacters(updated);
+        return newChar;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create character");
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
-      if (fetchError) throw fetchError;
-      setCharacters((data as CustomCharacter[]) ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch characters");
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+  const updateCharacter = useCallback(
+    async (id: string, input: Partial<CustomCharacterInput>): Promise<CustomCharacter | null> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const current = loadFromStorage();
+        const existing = current.find((c) => c.id === id);
+        if (!existing) throw new Error("Character not found");
 
-  const createCharacter = useCallback(async (input: CustomCharacterInput): Promise<CustomCharacter | null> => {
-    if (!user) return null;
+        const shouldNormalize =
+          input.mbti !== undefined ||
+          input.basic_info !== undefined ||
+          input.style_label !== undefined;
 
-    if (characters.length >= MAX_CUSTOM_CHARACTERS) {
-      setError(`Maximum ${MAX_CUSTOM_CHARACTERS} custom characters allowed`);
-      return null;
-    }
+        const normalizedInput = shouldNormalize
+          ? fillCustomCharacterOptionalFields({
+              display_name: input.display_name ?? "",
+              gender:
+                (input.gender as CustomCharacterInput["gender"]) ?? DEFAULT_CUSTOM_CHARACTER_GENDER,
+              age: input.age ?? DEFAULT_CUSTOM_CHARACTER_AGE,
+              mbti: input.mbti ?? "",
+              basic_info: input.basic_info ?? "",
+              style_label: input.style_label ?? "",
+              avatar_seed: input.avatar_seed,
+            })
+          : null;
 
-    setLoading(true);
-    setError(null);
+        const updated: CustomCharacter = {
+          ...existing,
+          updated_at: new Date().toISOString(),
+          ...(input.display_name !== undefined ? { display_name: input.display_name.trim() } : {}),
+          ...(input.gender !== undefined ? { gender: input.gender } : {}),
+          ...(input.age !== undefined ? { age: input.age } : {}),
+          ...(input.mbti !== undefined
+            ? { mbti: (normalizedInput?.mbti ?? input.mbti).toUpperCase() }
+            : {}),
+          ...(input.basic_info !== undefined
+            ? { basic_info: normalizedInput?.basic_info?.trim() || undefined }
+            : {}),
+          ...(input.style_label !== undefined
+            ? { style_label: normalizedInput?.style_label?.trim() || undefined }
+            : {}),
+          ...(input.avatar_seed !== undefined ? { avatar_seed: input.avatar_seed } : {}),
+        };
 
-    try {
-      const normalizedInput = fillCustomCharacterOptionalFields(input);
-      const avatarSeed = input.avatar_seed || `${input.display_name}-${Date.now()}`;
-      
-      const { data, error: insertError } = await supabase
-        .from("custom_characters")
-        .insert({
-          user_id: user.id,
-          display_name: normalizedInput.display_name.trim(),
-          gender: normalizedInput.gender,
-          age: normalizedInput.age,
-          mbti: normalizedInput.mbti.toUpperCase(),
-          basic_info: normalizedInput.basic_info?.trim() || null,
-          style_label: normalizedInput.style_label?.trim() || null,
-          avatar_seed: avatarSeed,
-        } as never)
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      
-      const newChar = data as CustomCharacter;
-      setCharacters(prev => [newChar, ...prev]);
-      return newChar;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create character");
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [user, characters.length]);
-
-  const updateCharacter = useCallback(async (
-    id: string,
-    input: Partial<CustomCharacterInput>
-  ): Promise<CustomCharacter | null> => {
-    if (!user) return null;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-      const shouldNormalizeOptionalFields =
-        input.mbti !== undefined || input.basic_info !== undefined || input.style_label !== undefined;
-      const normalizedInput = shouldNormalizeOptionalFields
-        ? fillCustomCharacterOptionalFields({
-            display_name: input.display_name ?? "",
-            gender: (input.gender as CustomCharacterInput["gender"]) ?? DEFAULT_CUSTOM_CHARACTER_GENDER,
-            age: input.age ?? DEFAULT_CUSTOM_CHARACTER_AGE,
-            mbti: input.mbti ?? "",
-            basic_info: input.basic_info ?? "",
-            style_label: input.style_label ?? "",
-            avatar_seed: input.avatar_seed,
-          })
-        : null;
-      
-      if (input.display_name !== undefined) updateData.display_name = input.display_name.trim();
-      if (input.gender !== undefined) updateData.gender = input.gender;
-      if (input.age !== undefined) updateData.age = input.age;
-      if (input.mbti !== undefined) updateData.mbti = (normalizedInput?.mbti ?? input.mbti).toUpperCase();
-      if (input.basic_info !== undefined) updateData.basic_info = normalizedInput?.basic_info?.trim() || null;
-      if (input.style_label !== undefined) updateData.style_label = normalizedInput?.style_label?.trim() || null;
-      if (input.avatar_seed !== undefined) updateData.avatar_seed = input.avatar_seed;
-
-      const { data, error: updateError } = await supabase
-        .from("custom_characters")
-        .update(updateData as never)
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-      
-      const updated = data as CustomCharacter;
-      setCharacters(prev => prev.map(c => c.id === id ? updated : c));
-      return updated;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update character");
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+        const updatedList = current.map((c) => (c.id === id ? updated : c));
+        saveToStorage(updatedList);
+        setCharacters(updatedList);
+        return updated;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update character");
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   const deleteCharacter = useCallback(async (id: string): Promise<boolean> => {
-    if (!user) return false;
-
     setLoading(true);
     setError(null);
-
     try {
-      const { error: deleteError } = await supabase
-        .from("custom_characters")
-        .update({ is_deleted: true, updated_at: new Date().toISOString() } as never)
-        .eq("id", id)
-        .eq("user_id", user.id);
-
-      if (deleteError) throw deleteError;
-      
-      setCharacters(prev => prev.filter(c => c.id !== id));
+      const current = loadFromStorage();
+      const updated = current.filter((c) => c.id !== id);
+      saveToStorage(updated);
+      setCharacters(updated);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete character");
@@ -159,7 +153,7 @@ export function useCustomCharacters(user: User | null) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     void fetchCharacters();

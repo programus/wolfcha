@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ALL_MODELS, AVAILABLE_MODELS, type ProviderName } from "@/types/game";
-import { resolveProviderConfig, isOpenAICompatibleProvider } from "@/lib/provider-config";
+import { resolveProviderConfig, isOpenAICompatibleProvider, fetchOpenAICompatibleModels } from "@/lib/provider-config";
 
 // API 调用超时时间（毫秒）
-const API_TIMEOUT_MS = 60000;
+const API_TIMEOUT_MS = 300000;
 
-function getProviderForModel(model: string): ProviderName | null {
+async function getProviderForModel(model: string): Promise<ProviderName | null> {
+  // Check openai-compatible models first (env var or fetched from /models API) —
+  // explicit server config takes priority over any built-in provider assignment
+  // (e.g. qwen-flash is registered as dashscope but may be served via a local
+  // openai-compatible endpoint).
+  const compatibleModels = await fetchOpenAICompatibleModels();
+  if (compatibleModels.includes(model)) return "openai-compatible";
   const modelRef =
     ALL_MODELS.find((ref) => ref.model === model) ??
     AVAILABLE_MODELS.find((ref) => ref.model === model);
-  return modelRef?.provider ?? null;
+  if (modelRef) return modelRef.provider;
+  return null;
 }
 
 /** Resolve ModelRef for a model id; used to apply per-model temperature/reasoning overrides. */
@@ -135,6 +142,193 @@ function stripCacheControl(messages: unknown[]): unknown[] {
   });
 }
 
+/**
+ * Returns true for OpenAI models that only support the default temperature (1) and
+ * reject any other value. This includes:
+ *  - o-series reasoning models (o1, o3, o4, o1-mini, o3-mini, o4-mini …)
+ *  - Newer models like gpt-5-nano where temperature must be omitted or be exactly 1
+ *
+ * For these models we simply omit the temperature parameter so the API uses its default.
+ */
+function requiresDefaultTemperature(model: string, provider: ProviderName | null): boolean {
+  if (provider !== "openai") return false;
+  if (!model) return false;
+  const m = model.toLowerCase();
+  // o-series: o1*, o3*, o4*, o2* (future-proof)
+  if (/^o[1-9](-|$|mini|pro|preview)/.test(m)) return true;
+  // e.g. "o3", "o1-mini", "o4-mini-2025-04-16"
+  if (/^o\d/.test(m)) return true;
+  // gpt-5-nano / gpt-5-mini (and dated snapshots) only support the default temperature (1)
+  if (/^gpt-5-(nano|mini)(-|$)/.test(m)) return true;
+  return false;
+}
+
+/**
+ * Returns true for OpenAI models that are ONLY supported via the Responses API
+ * (POST /v1/responses) and NOT via Chat Completions (POST /v1/chat/completions).
+ * Confirmed from https://developers.openai.com/api/docs/models:
+ *   - gpt-5.2-pro  → "available in the Responses API only"
+ *   - gpt-5.4-pro  → "available in the Responses API only"
+ *   - gpt-5-pro    → "available in the Responses API only"
+ */
+function requiresResponsesAPI(model: string, provider: ProviderName | null): boolean {
+  if (provider !== "openai") return false;
+  const m = model.toLowerCase();
+  // All gpt-5.x-pro and gpt-5-pro variants (including dated snapshots)
+  return /^gpt-5(\.[0-9]+)?-pro(-|$)/.test(m);
+}
+
+/** Extract the Responses API endpoint from a Chat Completions endpoint URL. */
+function toResponsesEndpoint(chatEndpoint: string): string {
+  return chatEndpoint.replace(/\/chat\/completions$/, "/responses");
+}
+
+/**
+ * Convert Chat Completions message format to Responses API input format.
+ * The Responses API uses different content part type names:
+ *   user/system  messages: "text" → "input_text",  "image_url" → "input_image"
+ *   assistant    messages: "text" → "output_text"
+ */
+function convertMessagesToResponsesInput(messages: unknown[]): unknown[] {
+  if (!Array.isArray(messages)) return messages;
+
+  return messages.map((msg) => {
+    if (!msg || typeof msg !== "object") return msg;
+    const m = msg as Record<string, unknown>;
+    const role = m.role as string | undefined;
+
+    // String content needs no conversion
+    if (typeof m.content === "string") return m;
+
+    if (!Array.isArray(m.content)) return m;
+
+    const convertedContent = m.content.map((part): unknown => {
+      if (!part || typeof part !== "object") return part;
+      const p = part as Record<string, unknown>;
+
+      if (p.type === "text") {
+        return role === "assistant"
+          ? { ...p, type: "output_text" }
+          : { ...p, type: "input_text" };
+      }
+
+      if (p.type === "image_url") {
+        // Chat Completions: { type: "image_url", image_url: { url, detail? } }
+        // Responses API:    { type: "input_image", image_url: "<url>" }
+        const imgUrl = p.image_url as { url?: string } | undefined;
+        return { type: "input_image", image_url: imgUrl?.url ?? "" };
+      }
+
+      return part;
+    });
+
+    return { ...m, content: convertedContent };
+  });
+}
+
+/**
+ * Convert a Responses API (non-streaming) response body to Chat Completions format
+ * so the rest of the codebase can consume it unchanged.
+ */
+function convertResponsesAPIToCompletions(
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  // Use the convenience `output_text` field if available, otherwise dig into `output`
+  let text = (data.output_text as string) ?? "";
+  if (!text) {
+    const output = data.output as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(output)) {
+      for (const item of output) {
+        if (item.type === "message" && item.role === "assistant") {
+          const parts = item.content as Array<Record<string, unknown>> | undefined;
+          if (Array.isArray(parts)) {
+            const found = parts.find((p) => p.type === "output_text");
+            if (found) { text = (found as { text?: string }).text ?? ""; break; }
+          }
+        }
+      }
+    }
+  }
+  const usage = data.usage as Record<string, number> | undefined;
+  return {
+    id: data.id ?? "resp_unknown",
+    choices: [{
+      message: { role: "assistant", content: text },
+      finish_reason: data.status === "completed" ? "stop" : "length",
+    }],
+    usage: usage ? {
+      prompt_tokens: usage.input_tokens ?? 0,
+      completion_tokens: usage.output_tokens ?? 0,
+      total_tokens: usage.total_tokens ?? 0,
+    } : undefined,
+  };
+}
+
+/**
+ * Returns a TransformStream that converts Responses API SSE events to Chat Completions
+ * SSE format, so existing stream consumers work without modification.
+ *
+ * Key events translated:
+ *   response.output_text.delta  → data: {choices:[{delta:{content:"…"}}]}
+ *   response.completed          → final chunk (finish_reason:"stop") + data: [DONE]
+ *   response.failed / .incomplete → final chunk (finish_reason:"length") + [DONE]
+ */
+function createResponsesStreamTransformer(
+  responseId: string,
+  model: string
+): TransformStream<Uint8Array, Uint8Array> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finished = false;
+
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const dataStr = line.slice(6).trim();
+        if (dataStr === "[DONE]") { finished = true; break; }
+        let ev: Record<string, unknown>;
+        try { ev = JSON.parse(dataStr) as Record<string, unknown>; } catch { continue; }
+        const evType = ev.type as string | undefined;
+
+        if (evType === "response.output_text.delta") {
+          const delta = (ev.delta as string) ?? "";
+          controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({
+              id: responseId, object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000), model,
+              choices: [{ index: 0, delta: { content: delta }, finish_reason: null }],
+            })}\n\n`
+          ));
+        } else if (
+          evType === "response.completed" ||
+          evType === "response.failed" ||
+          evType === "response.incomplete"
+        ) {
+          const finishReason = evType === "response.completed" ? "stop" : "length";
+          controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({
+              id: responseId, object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000), model,
+              choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
+            })}\n\n`
+          ));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          finished = true;
+        }
+      }
+    },
+    flush(controller) {
+      if (!finished) controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+    },
+  });
+}
+
 // ZenMux reasoning: only enabled, effort, max_tokens (see docs.zenmux.ai/guide/advanced/reasoning.html)
 type ReasoningPayload = {
   enabled: boolean;
@@ -220,7 +414,7 @@ async function runBatchItem(
     return { ok: false, status: 400, error: "Batch request does not support stream=true" };
   }
 
-  const modelProvider: ProviderName | null = provider ?? getProviderForModel(model);
+  const modelProvider: ProviderName | null = provider ?? await getProviderForModel(model);
   if (!modelProvider) {
     return { ok: false, status: 400, error: `Unknown model: ${String(model ?? "").trim() || "unknown"}` };
   }
@@ -316,13 +510,57 @@ async function runBatchItem(
     if (!cfg.endpoint) {
       return { ok: false, status: 500, error: `Endpoint URL not configured for provider: ${modelProvider}` };
     }
+
+    // ── Responses API (gpt-5.x-pro / gpt-5-pro ─ Responses API only) ────────────────
+    if (requiresResponsesAPI(model, modelProvider)) {
+      const responsesEndpoint = toResponsesEndpoint(cfg.endpoint);
+      const reqBody: Record<string, unknown> = {
+        model,
+        input: convertMessagesToResponsesInput(processedMessages),
+        store: false,
+      };
+      if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
+        reqBody.max_output_tokens = Math.max(16, Math.floor(max_tokens));
+      }
+      const resolvedEffort = isReasoningEffort(reasoning_effort) ? reasoning_effort : undefined;
+      if (resolvedEffort) reqBody.reasoning = { effort: resolvedEffort };
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetchOpenAICompatible(responsesEndpoint, cfg.apiKey, cfg.extraHeaders, reqBody, controller.signal);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      if (!response.ok) {
+        const errorText = await response.text();
+        let parsed: unknown;
+        try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
+        return { ok: false, status: response.status, error: `${modelProvider} API error: ${response.status}`, details: parsed ?? errorText };
+      }
+      return { ok: true, data: convertResponsesAPIToCompletions(await response.json() as Record<string, unknown>) };
+    }
+
+    // OpenAI requires messages to contain "json" when response_format is json_object
+    const normalizedResponseFormat = response_format as { type?: unknown } | undefined;
+    const messagesForRequest =
+      normalizedResponseFormat?.type === "json_object"
+        ? withDashscopeJsonHint(processedMessages)
+        : processedMessages;
     const requestBody: Record<string, unknown> = {
       model,
-      messages: processedMessages,
-      temperature: cappedTemperature,
+      messages: messagesForRequest,
     };
+    // Some OpenAI models (o-series, gpt-5-nano …) only support the default temperature
+    // and reject any other value; omit the parameter for those models.
+    if (!requiresDefaultTemperature(model, modelProvider)) {
+      requestBody.temperature = cappedTemperature;
+    }
     if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
-      requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
+      // OpenAI newer models (o-series, gpt-5-nano, etc.) only accept max_completion_tokens;
+      // other providers (google, anthropic, openai-compatible) still use max_tokens.
+      const tokenParam = modelProvider === "openai" ? "max_completion_tokens" : "max_tokens";
+      requestBody[tokenParam] = Math.max(16, Math.floor(max_tokens));
     }
     if (response_format && supportsResponseFormat(model, modelProvider)) {
       requestBody.response_format = response_format;
@@ -411,7 +649,7 @@ export async function POST(request: NextRequest) {
       response_format,
       provider,
     } = body;
-    const modelProvider: ProviderName | null = provider ?? getProviderForModel(model);
+    const modelProvider: ProviderName | null = provider ?? await getProviderForModel(model);
     if (!modelProvider) {
       return NextResponse.json(
         { error: `Unknown model: ${String(model ?? "").trim() || "unknown"}` },
@@ -532,13 +770,71 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      // ── Responses API (gpt-5.x-pro / gpt-5-pro ─ Responses API only) ─────────────
+      if (requiresResponsesAPI(model, modelProvider)) {
+        const responsesEndpoint = toResponsesEndpoint(cfg.endpoint);
+        const reqBody: Record<string, unknown> = {
+          model,
+          input: convertMessagesToResponsesInput(processedMessages),
+          store: false,
+        };
+        if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
+          reqBody.max_output_tokens = Math.max(16, Math.floor(max_tokens));
+        }
+        if (stream) reqBody.stream = true;
+        const resolvedEffort = isReasoningEffort(reasoning_effort) ? reasoning_effort : undefined;
+        if (resolvedEffort) reqBody.reasoning = { effort: resolvedEffort };
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+        let response: Response;
+        try {
+          response = await fetchOpenAICompatible(responsesEndpoint, cfg.apiKey, cfg.extraHeaders, reqBody, controller.signal);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+        if (!response.ok) {
+          const errorText = await response.text();
+          let parsed: unknown;
+          try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
+          return NextResponse.json(
+            { error: `${modelProvider} API error: ${response.status}`, details: parsed ?? errorText },
+            { status: response.status }
+          );
+        }
+        if (stream && response.body) {
+          const respId = `resp_${Date.now()}`;
+          const transformer = createResponsesStreamTransformer(respId, model);
+          const transformed = response.body.pipeThrough(transformer);
+          const headers = new Headers();
+          headers.set("Content-Type", "text/event-stream");
+          headers.set("Cache-Control", "no-cache");
+          headers.set("Connection", "keep-alive");
+          return new Response(transformed, { headers });
+        }
+        return NextResponse.json(convertResponsesAPIToCompletions(await response.json() as Record<string, unknown>));
+      }
+
+      // OpenAI requires messages to contain "json" when response_format is json_object
+      const normalizedResponseFormat = response_format as { type?: unknown } | undefined;
+      const messagesForRequest =
+        normalizedResponseFormat?.type === "json_object"
+          ? withDashscopeJsonHint(processedMessages)
+          : processedMessages;
       const requestBody: Record<string, unknown> = {
         model,
-        messages: processedMessages,
-        temperature: cappedTemperature,
+        messages: messagesForRequest,
       };
+      // Some OpenAI models (o-series, gpt-5-nano …) only support the default temperature
+      // and reject any other value; omit the parameter for those models.
+      if (!requiresDefaultTemperature(model, modelProvider)) {
+        requestBody.temperature = cappedTemperature;
+      }
       if (typeof max_tokens === "number" && Number.isFinite(max_tokens)) {
-        requestBody.max_tokens = Math.max(16, Math.floor(max_tokens));
+        // OpenAI newer models (o-series, gpt-5-nano, etc.) only accept max_completion_tokens;
+        // other providers (google, anthropic, openai-compatible) still use max_tokens.
+        const tokenParam = modelProvider === "openai" ? "max_completion_tokens" : "max_tokens";
+        requestBody[tokenParam] = Math.max(16, Math.floor(max_tokens));
       }
       if (stream) requestBody.stream = true;
       if (response_format && supportsResponseFormat(model, modelProvider)) {

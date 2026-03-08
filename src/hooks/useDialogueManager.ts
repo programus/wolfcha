@@ -49,6 +49,7 @@ export function useDialogueManager() {
   const [waitingForNextRound, setWaitingForNextRound] = useState(false);
   const speechQueueRef = useRef<SpeechQueueState | null>(null);
   const prefetchedSpeechRef = useRef<PrefetchedSpeech | null>(null);
+  const prefetchCompletionRef = useRef<{ promise: Promise<string[]>; resolve: (s: string[]) => void } | null>(null);
 
   /** 设置对话内容 */
   const setDialogue = useCallback((speaker: string, text: string, isStreaming = false) => {
@@ -223,9 +224,33 @@ export function useDialogueManager() {
     queue.shouldAutoAdvanceToNextAI = options?.nextSpeakerIsAI ?? false;
   }, []);
 
+  /** 创建预加载完成 Promise（在预取 API 调用发出前调用） */
+  const createPrefetchCompletion = useCallback(() => {
+    // 如果有未完成的旧 completion，先 resolve 掉（以 [] 代表放弃）
+    if (prefetchCompletionRef.current) {
+      prefetchCompletionRef.current.resolve([]);
+    }
+    let _resolve!: (segments: string[]) => void;
+    const promise = new Promise<string[]>((res) => { _resolve = res; });
+    prefetchCompletionRef.current = { promise, resolve: _resolve };
+  }, []);
+
   /** 设置预加载发言缓存 */
   const setPrefetchedSpeech = useCallback((prefetch: PrefetchedSpeech | null) => {
     prefetchedSpeechRef.current = prefetch;
+    if (prefetch === null) {
+      // 出错或清除时，以空数组 resolve，解除所有等待者
+      if (prefetchCompletionRef.current) {
+        prefetchCompletionRef.current.resolve([]);
+        prefetchCompletionRef.current = null;
+      }
+    } else if (prefetch.isComplete) {
+      // 完成时，以最终段落 resolve
+      if (prefetchCompletionRef.current) {
+        prefetchCompletionRef.current.resolve(prefetch.segments);
+        prefetchCompletionRef.current = null;
+      }
+    }
   }, []);
 
   /** 消费预加载发言缓存（匹配元数据后清除） */
@@ -241,15 +266,36 @@ export function useDialogueManager() {
 
     if (!matches) {
       prefetchedSpeechRef.current = null;
+      // 同时丢弃不再相关的 completion promise
+      if (prefetchCompletionRef.current) {
+        prefetchCompletionRef.current.resolve([]);
+        prefetchCompletionRef.current = null;
+      }
       return null;
     }
 
     if (!prefetch.isComplete || prefetch.segments.length === 0) {
-      return null;
+      return null; // 正在进行中，调用方可通过 getInProgressPrefetchPromise 等待
     }
 
     prefetchedSpeechRef.current = null;
     return prefetch.segments;
+  }, []);
+
+  /** 获取正在进行中的预取 Promise（若匹配条件则返回，否则返回 null） */
+  const getInProgressPrefetchPromise = useCallback((criteria: PrefetchCriteria): Promise<string[]> | null => {
+    const prefetch = prefetchedSpeechRef.current;
+    if (!prefetch || prefetch.isComplete) return null;
+
+    const matches =
+      prefetch.playerId === criteria.playerId &&
+      prefetch.phase === criteria.phase &&
+      prefetch.day === criteria.day &&
+      criteria.messageCount >= prefetch.messageCount;
+
+    if (!matches) return null;
+
+    return prefetchCompletionRef.current?.promise ?? null;
   }, []);
 
   /** 重置所有对话状态 */
@@ -259,6 +305,10 @@ export function useDialogueManager() {
     setWaitingForNextRound(false);
     speechQueueRef.current = null;
     prefetchedSpeechRef.current = null;
+    if (prefetchCompletionRef.current) {
+      prefetchCompletionRef.current.resolve([]);
+      prefetchCompletionRef.current = null;
+    }
   }, []);
 
   /** 检查下一个发言者是否是AI（用于自动推进时减少延迟） */
@@ -290,7 +340,9 @@ export function useDialogueManager() {
     clearSpeechQueue,
     resetDialogueState,
     setPrefetchedSpeech,
+    createPrefetchCompletion,
     consumePrefetchedSpeech,
+    getInProgressPrefetchPromise,
     markCurrentSegmentCommitted,
     isCurrentSegmentCommitted,
     markCurrentSegmentCompleted,

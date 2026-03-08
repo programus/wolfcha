@@ -128,6 +128,50 @@ export function resolveProviderConfig(provider: ProviderName): ProviderConfig {
 }
 
 /**
+ * Resolve the list of model IDs for the `openai-compatible` provider.
+ *
+ * Priority:
+ *  1. `OPENAI_COMPATIBLE_MODELS` env var (comma-separated) — if set, use as-is.
+ *  2. Fetch from `${OPENAI_COMPATIBLE_BASE_URL}/models` when both BASE_URL and
+ *     API_KEY are configured. The endpoint must return an OpenAI-style response:
+ *     `{ data: [{ id: "model-id" }, …] }`.
+ *  3. Returns an empty array if neither source is available.
+ *
+ * Server-side only.
+ */
+export async function fetchOpenAICompatibleModels(): Promise<string[]> {
+  // 1. Env var takes priority.
+  const fromEnv = (process.env.OPENAI_COMPATIBLE_MODELS ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  if (fromEnv.length > 0) return fromEnv;
+
+  // 2. Fetch from the provider's /models endpoint.
+  const base = (process.env.OPENAI_COMPATIBLE_BASE_URL ?? "").replace(/\/$/, "");
+  const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY ?? "";
+  if (!base || !apiKey) return [];
+
+  try {
+    const res = await fetch(`${base}/models`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      // Avoid hanging the request for too long during page load / status checks.
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { data?: Array<{ id: string }> };
+    return (json.data ?? []).map((m) => m.id).filter(Boolean);
+  } catch {
+    // Network error, timeout, or malformed JSON — fall back to empty list.
+    return [];
+  }
+}
+
+/**
  * Whether a given provider is one of the three direct-connect providers or
  * an openai-compatible endpoint (i.e. NOT zenmux / dashscope).
  * Used to skip ZenMux-specific request shaping (reasoning fields, etc.).

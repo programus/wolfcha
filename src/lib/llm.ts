@@ -1,7 +1,6 @@
 import { getDashscopeApiKey, getZenmuxApiKey, isCustomKeyEnabled } from "@/lib/api-keys";
 import { ALL_MODELS, AVAILABLE_MODELS, type ModelRef, type ProviderName } from "@/types/game";
 import { gameStatsTracker } from "@/hooks/useGameStats";
-import { gameSessionTracker } from "@/lib/game-session-tracker";
 
 export type LLMContentPart =
   | { type: "text"; text: string; cache_control?: { type: "ephemeral"; ttl?: "1h" } }
@@ -25,12 +24,27 @@ function getProviderForModel(model: string): ProviderName {
    return modelRef?.provider ?? "zenmux";
  }
 
+// Providers whose API keys are managed exclusively via server env vars (no client-side key).
+// These models must never be downgraded to a built-in model — the server already has the key.
+const SERVER_DIRECT_PROVIDERS = new Set<ProviderName>(["openai", "google", "anthropic", "openai-compatible"]);
+
 // When using built-in keys (custom disabled), only models in AVAILABLE_MODELS
 // are allowed; the server rejects non-AVAILABLE models without x-zenmux-api-key.
 // Game state may contain modelRef from ALL_MODELS (e.g. from a game started with
 // custom key on). Map to an AVAILABLE model to avoid "此模型需要您提供 Zenmux API Key".
-function resolveModelForBuiltin(model: string): string {
+// Exception: server-direct provider models (openai/google/anthropic/openai-compatible)
+// use server-side env var keys only — they never need a client-side key and must pass through.
+function resolveModelForBuiltin(model: string, provider?: ProviderName): string {
   if (AVAILABLE_MODELS.some((r) => r.model === model)) return model;
+  // Server-direct models: the route handles them with its own env var API keys.
+  const inAll = ALL_MODELS.find((r) => r.model === model);
+  if (inAll && SERVER_DIRECT_PROVIDERS.has(inAll.provider)) return model;
+  // Dynamic models: if the explicit provider hint is server-direct, pass through unchanged.
+  // (e.g. openai-compatible models configured via OPENAI_COMPATIBLE_MODELS env var)
+  if (provider && SERVER_DIRECT_PROVIDERS.has(provider)) return model;
+  // Dynamic models not present in any built-in list → openai-compatible (server env key),
+  // always pass through rather than downgrading to a zenmux model.
+  if (!inAll) return model;
   const m =
     AVAILABLE_MODELS.find((r) => r.provider === "zenmux") ?? AVAILABLE_MODELS[0];
   return m?.model ?? model;
@@ -93,6 +107,8 @@ export interface ReasoningOptions {
 
 export interface GenerateOptions {
   model: string;
+  /** Explicit provider hint — required for dynamic openai-compatible models not in ALL_MODELS. */
+  provider?: ProviderName;
   messages: LLMMessage[];
   temperature?: number;
   max_tokens?: number;
@@ -101,7 +117,7 @@ export interface GenerateOptions {
   response_format?: ResponseFormat;
 }
 
-/** Merge modelRef overrides (temperature, reasoning) into options; modelRef values override call-time when present. */
+/** Merge modelRef overrides (temperature, reasoning, provider) into options; modelRef values override call-time when present. */
 export function mergeOptionsFromModelRef<T extends GenerateOptions>(
   modelRef: ModelRef | undefined,
   options: T
@@ -110,6 +126,8 @@ export function mergeOptionsFromModelRef<T extends GenerateOptions>(
   const out = { ...options } as T;
   if (modelRef.temperature !== undefined) (out as GenerateOptions).temperature = modelRef.temperature;
   if (modelRef.reasoning !== undefined) (out as GenerateOptions).reasoning = modelRef.reasoning;
+  // Always propagate provider so dynamic models (e.g. openai-compatible) are routed correctly
+  (out as GenerateOptions).provider = modelRef.provider;
   return out;
 }
 
@@ -413,7 +431,7 @@ export async function generateCompletion(
   const dashscopeApiKey = customEnabled ? getDashscopeApiKey() : "";
   const modelToUse = customEnabled
     ? options.model
-    : resolveModelForBuiltin(options.model);
+    : resolveModelForBuiltin(options.model, options.provider);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -440,6 +458,7 @@ export async function generateCompletion(
       },
       body: JSON.stringify({
         model: modelToUse,
+        ...(options.provider ? { provider: options.provider } : {}),
         messages: options.messages,
         temperature: options.temperature ?? 0.7,
         max_tokens: maxTokens,
@@ -487,12 +506,6 @@ export async function generateCompletion(
     promptTokens: result.usage?.prompt_tokens,
     completionTokens: result.usage?.completion_tokens,
   });
-  gameSessionTracker.addAiCall({
-    inputChars,
-    outputChars: assistantMessage.content.length,
-    promptTokens: result.usage?.prompt_tokens,
-    completionTokens: result.usage?.completion_tokens,
-  });
 
   return {
     content: assistantMessage.content,
@@ -511,7 +524,7 @@ export async function generateCompletionBatch(
   const dashscopeApiKey = customEnabled ? getDashscopeApiKey() : "";
   const resolvedRequests = customEnabled
     ? requests
-    : requests.map((r) => ({ ...r, model: resolveModelForBuiltin(r.model) }));
+    : requests.map((r) => ({ ...r, model: resolveModelForBuiltin(r.model, r.provider) }));
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -576,7 +589,7 @@ export async function* generateCompletionStream(
   const dashscopeApiKey = customEnabled ? getDashscopeApiKey() : "";
   const modelToUse = customEnabled
     ? options.model
-    : resolveModelForBuiltin(options.model);
+    : resolveModelForBuiltin(options.model, options.provider);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -596,6 +609,7 @@ export async function* generateCompletionStream(
       },
       body: JSON.stringify({
         model: modelToUse,
+        ...(options.provider ? { provider: options.provider } : {}),
         messages: options.messages,
         temperature: options.temperature ?? 0.7,
         max_tokens: maxTokens,
@@ -662,11 +676,8 @@ export async function* generateCompletionStream(
     inputChars,
     outputChars: totalOutputChars,
   });
-  gameSessionTracker.addAiCall({
-    inputChars,
-    outputChars: totalOutputChars,
-  });
 }
+
 
 export async function generateJSON<T>(
   options: GenerateOptions & { schema?: string }

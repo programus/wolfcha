@@ -30,7 +30,9 @@ export interface DayPhaseCallbacks {
   appendToSpeechQueue: (segment: string) => void;
   finalizeSpeechQueue: (options?: { nextSpeakerIsAI?: boolean }) => void;
   setPrefetchedSpeech: (prefetch: PrefetchedSpeech | null) => void;
+  createPrefetchCompletion: () => void;
   consumePrefetchedSpeech: (criteria: PrefetchCriteria) => string[] | null;
+  getInProgressPrefetchPromise: (criteria: PrefetchCriteria) => Promise<string[]> | null;
   setAfterLastWords: (callback: ((s: GameState) => Promise<void>) | null) => void;
 }
 
@@ -61,7 +63,9 @@ export function useDayPhase(
     appendToSpeechQueue,
     finalizeSpeechQueue,
     setPrefetchedSpeech,
+    createPrefetchCompletion,
     consumePrefetchedSpeech,
+    getInProgressPrefetchPromise,
     setAfterLastWords,
   } = callbacks;
 
@@ -169,6 +173,8 @@ export function useDayPhase(
       createdAt: Date.now(),
     };
 
+    // 在 API 请求发出前先创建 completion promise，让 runAISpeech 可以 await （而不是发起第二次请求）
+    createPrefetchCompletion();
     setPrefetchedSpeech(basePrefetch);
 
     const collected: string[] = [];
@@ -201,7 +207,7 @@ export function useDayPhase(
     } catch {
       setPrefetchedSpeech(null);
     }
-  }, [setPrefetchedSpeech]);
+  }, [createPrefetchCompletion, setPrefetchedSpeech]);
 
   /** AI 发言（流式分段输出） */
   const runAISpeech = useCallback(async (
@@ -269,12 +275,54 @@ export function useDayPhase(
       return;
     }
 
+    // 如果预取正在进行中（未完成），等待它完成而不是发起新的 API 请求
+    const inProgressPromise = getInProgressPrefetchPromise(prefetchCriteria);
+    if (inProgressPromise) {
+      currentSpeakingPlayerRef.current = player.playerId;
+      setIsWaitingForAI(true);
+      setDialogue(player.displayName, t("dayPhase.organizing"), true);
+
+      const waitedSegments = await inProgressPromise;
+      // 清除 ref（prefetchCompletionRef 已由 setPrefetchedSpeech 自动清除）
+      setPrefetchedSpeech(null);
+
+      if (waitedSegments && waitedSegments.length > 0) {
+        setIsWaitingForAI(false);
+        initSpeechQueue(
+          waitedSegments,
+          player,
+          options?.afterSpeech as ((s: unknown) => Promise<void>) | undefined
+        );
+
+        try {
+          const firstSegment = waitedSegments[0];
+          if (firstSegment) {
+            const task = {
+              id: makeAudioTaskId(voiceId, firstSegment),
+              text: firstSegment,
+              voiceId,
+              playerId: player.playerId,
+            };
+            audioManager.prefetchTasks([task], { concurrency: 1 }).catch(() => {});
+          }
+        } catch {
+          // ignore tts prefetch errors
+        }
+
+        currentSpeakingPlayerRef.current = null;
+        return;
+      }
+      // 预取出错（空数组），回退到普通调用路径
+      setIsWaitingForAI(false);
+      currentSpeakingPlayerRef.current = null;
+    }
+
     currentSpeakingPlayerRef.current = player.playerId;
     setIsWaitingForAI(true);
     setDialogue(player.displayName, t("dayPhase.organizing"), true);
 
     // 60秒超时机制：避免卡死在"正在组织语言"状态
-    const ORGANIZING_TIMEOUT_MS = 60000;
+    const ORGANIZING_TIMEOUT_MS = 300000;
     const timeoutPromise = new Promise<"timeout">((resolve) => {
       setTimeout(() => {
         if (!hasReceivedFirstSegment) {
@@ -394,6 +442,8 @@ export function useDayPhase(
     appendToSpeechQueue,
     finalizeSpeechQueue,
     consumePrefetchedSpeech,
+    getInProgressPrefetchPromise,
+    setPrefetchedSpeech,
     prefetchNextAISpeech,
     resolveNextSpeaker,
     buildPostSpeechState,

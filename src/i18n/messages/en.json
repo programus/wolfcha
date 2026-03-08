@@ -110,6 +110,7 @@
       "mailBody": "Hi, I'm interested in supporting Wolfcha and would like to offer help in the following ways:\n\n- (Model credits / compute)\n- (Voice / SFX assets)\n- (Design / product collaboration)\n- (Other)\n\nMy contact info:\n\n"
     },
     "settings": "Settings",
+    "modelSettings": "AI Models",
     "tutorial": "How to play",
     "subtitle": "The Shadow Game",
     "oath": {
@@ -2236,5 +2237,38 @@
     "recharge": "Buy Game Credits",
     "startGame": "Continue Playing",
     "startGameNoCredits": "Buy Game Credits"
+  },
+  "modelSettings": {
+    "title": "AI Model Settings",
+    "description": "Choose which AI models are used for AI players. Select one or more from available providers — the game will randomly assign them to each AI character.",
+    "descriptionLocked": "A game is in progress. Model settings cannot be changed. Adjust them before the next game starts.",
+    "loading": "Loading provider status…",
+    "status": {
+      "available": "Available",
+      "notConfigured": "Not configured"
+    },
+    "badge": {
+      "builtin": "Built-in"
+    },
+    "configureHint": {
+      "openai": "Set OPENAI_API_KEY on the server to enable this provider",
+      "google": "Set GOOGLE_API_KEY on the server to enable this provider",
+      "anthropic": "Set ANTHROPIC_API_KEY on the server to enable this provider",
+      "openaiCompatible": "Set OPENAI_COMPATIBLE_API_KEY, OPENAI_COMPATIBLE_BASE_URL, and OPENAI_COMPATIBLE_MODELS on the server to enable",
+      "default": "Configure the corresponding API Key in .env.local to enable this provider"
+    },
+    "footer": {
+      "allUsed": "No selection — all {total} available models will be used randomly",
+      "selectedCount": "{count} of {total} models selected — AI players will be assigned randomly from these"
+    },
+    "actions": {
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "close": "Close",
+      "save": "Save"
+    },
+    "toast": {
+      "saved": "Model settings saved"
+    }
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { FingerprintSimple, PawPrint, Sparkle, Wrench, GearSix, UserCircle, GithubLogo, Star, EnvelopeSimple, Handshake, DotsThreeOutlineVertical, Users, UsersFour } from "@phosphor-icons/react";
+import { FingerprintSimple, PawPrint, Sparkle, Wrench, GearSix, GithubLogo, Star, EnvelopeSimple, Handshake, DotsThreeOutlineVertical, Users, UsersFour, Robot } from "@phosphor-icons/react";
 import { WerewolfIcon } from "@/components/icons/FlatIcons";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,29 +12,14 @@ import { toast } from "sonner";
 import type { DevPreset, DifficultyLevel, Role, StartGameOptions } from "@/types/game";
 import { DevModeButton } from "@/components/DevTools";
 import { GameSetupModal } from "@/components/game/GameSetupModal";
-import { AuthModal } from "@/components/game/AuthModal";
-import { SharePanel } from "@/components/game/SharePanel";
-import { AccountModal } from "@/components/game/AccountModal";
-import { ResetPasswordModal } from "@/components/game/ResetPasswordModal";
-import { UserProfileModal } from "@/components/game/UserProfileModal";
-import { LowCreditModal, LOW_CREDIT_THRESHOLD } from "@/components/game/LowCreditModal";
 import { LocaleSwitcher } from "@/components/game/LocaleSwitcher";
 import { CustomCharacterModal } from "@/components/game/CustomCharacterModal";
+import { ModelSettingsModal } from "@/components/game/ModelSettingsModal";
 import { useCustomCharacters } from "@/hooks/useCustomCharacters";
-import { useCredits } from "@/hooks/useCredits";
 import { difficultyAtom, playerCountAtom, preferredRoleAtom } from "@/store/settings";
-import { hasDashscopeKey, hasZenmuxKey, isCustomKeyEnabled } from "@/lib/api-keys";
 import { useAppLocale } from "@/i18n/useAppLocale";
 import {
-  SPRING_CAMPAIGN_CODE,
-  SPRING_CAMPAIGN_DAILY_QUOTA,
-  getShanghaiDateKey,
-  isSpringCampaignActive,
-} from "@/lib/spring-campaign";
-import {
   FREE_ROUNDS_PROMO_ENABLED,
-  REFERRAL_BONUS_ENABLED,
-  SPRING_CAMPAIGN_ENABLED,
 } from "@/lib/welfare-config";
 
 type SponsorCardProps = {
@@ -254,43 +239,18 @@ export function WelcomeScreen({
     return `mailto:${sponsorEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }, [sponsorEmail, t]);
 
-  const {
-    user,
-    session,
-    credits,
-    referralCode,
-    totalReferrals,
-    loading: creditsLoading,
-    consumeCredit,
-    redeemCode,
-    signOut,
-    isPasswordRecovery,
-    clearPasswordRecovery,
-    fetchCredits,
-    springCampaign,
-  } = useCredits();
   const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const paperRef = useRef<HTMLDivElement | null>(null);
   const sealButtonRef = useRef<HTMLButtonElement | null>(null);
   const isStartingRef = useRef(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isAccountOpen, setIsAccountOpen] = useState(false);
-  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
   const [isSponsorOpen, setIsSponsorOpen] = useState(false);
-  const [isSpringFestivalOpen, setIsSpringFestivalOpen] = useState(false);
   const [isGroupOpen, setIsGroupOpen] = useState(false);
   const [groupImgOk, setGroupImgOk] = useState<boolean | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCustomCharacterOpen, setIsCustomCharacterOpen] = useState(false);
-  const [isLowCreditOpen, setIsLowCreditOpen] = useState(false);
-  const [userProfileDefaultTab, setUserProfileDefaultTab] = useState<string | undefined>(undefined);
-  const selectionStorageKey = useMemo(() => {
-    return user?.id
-      ? `${CUSTOM_CHARACTER_SELECTION_STORAGE_KEY}:${user.id}`
-      : CUSTOM_CHARACTER_SELECTION_STORAGE_KEY;
-  }, [user?.id]);
+  const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
+  const selectionStorageKey = CUSTOM_CHARACTER_SELECTION_STORAGE_KEY;
 
   const readSelectionFromStorage = useCallback(() => {
     if (typeof window === "undefined") return new Set<string>();
@@ -310,51 +270,14 @@ export function WelcomeScreen({
     readSelectionFromStorage()
   );
 
-  const customCharacters = useCustomCharacters(user);
+  const customCharacters = useCustomCharacters();
   const [difficulty, setDifficulty] = useAtom(difficultyAtom);
   const [playerCount, setPlayerCount] = useAtom(playerCountAtom);
   const [preferredRole, setPreferredRole] = useAtom(preferredRoleAtom);
   const [githubStars, setGithubStars] = useState<number | null>(null);
-  const springCampaignRemainingQuota = springCampaign?.remainingQuota ?? 0;
-  const springCampaignTotalQuota = springCampaign?.totalQuota ?? 0;
-  const springCampaignActiveNow = SPRING_CAMPAIGN_ENABLED
-    && (springCampaign?.active ?? isSpringCampaignActive());
-  const springCampaignDateToday = springCampaignActiveNow ? getShanghaiDateKey() : null;
-  const isSpringCampaignForToday = springCampaignActiveNow
-    && springCampaign?.quotaDate === springCampaignDateToday;
-  const effectiveSpringRemainingQuota = springCampaignActiveNow
-    ? (isSpringCampaignForToday ? springCampaignRemainingQuota : SPRING_CAMPAIGN_DAILY_QUOTA)
-    : 0;
-  const effectiveSpringTotalQuota = springCampaignActiveNow
-    ? (isSpringCampaignForToday ? springCampaignTotalQuota : SPRING_CAMPAIGN_DAILY_QUOTA)
-    : 0;
-  const hasSpringQuota = springCampaignActiveNow && effectiveSpringRemainingQuota > 0;
-  const mayHaveUnclaimedSpringQuota = springCampaignActiveNow && !isSpringCampaignForToday;
-  const springFestivalSeenKey = `wolfcha:${SPRING_CAMPAIGN_CODE}:welcome_seen`;
-
   useEffect(() => {
     if (locale === "en") setIsGroupOpen(false);
   }, [locale]);
-
-  useEffect(() => {
-    if (!SPRING_CAMPAIGN_ENABLED || !springCampaign?.active || !springCampaign.justClaimed) return;
-    toast.success(t("welcome.springCampaign.toast.claimed.title"), {
-      description: t("welcome.springCampaign.toast.claimed.description"),
-    });
-  }, [springCampaign?.active, springCampaign?.justClaimed, t]);
-
-  useEffect(() => {
-    if (!springCampaignActiveNow) return;
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const popupDebugMode = params.get("spring_popup_debug") === "1";
-    const seen = window.localStorage.getItem(springFestivalSeenKey);
-    if (!popupDebugMode && seen === "1") return;
-    if (!popupDebugMode) {
-      window.localStorage.setItem(springFestivalSeenKey, "1");
-    }
-    setIsSpringFestivalOpen(true);
-  }, [springCampaignActiveNow, springFestivalSeenKey]);
 
   useEffect(() => {
     selectionStorageKeyRef.current = selectionStorageKey;
@@ -378,18 +301,6 @@ export function WelcomeScreen({
       setSelectedCharacterIds(filtered);
     }
   }, [customCharacters.characters, customCharacters.loading, selectedCharacterIds]);
-
-  const [customKeyEnabled, setCustomKeyEnabled] = useState(() => isCustomKeyEnabled());
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== "wolfcha_custom_key_enabled") return;
-      setCustomKeyEnabled(isCustomKeyEnabled());
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
 
   // 调试面板状态
   const [mounted, setMounted] = useState(false);
@@ -483,21 +394,16 @@ export function WelcomeScreen({
   }, [playerCount, t]);
 
   const canConfirm = useMemo(() => {
-    return !!humanName.trim() && !isLoading && !isTransitioning && !creditsLoading;
-  }, [humanName, isLoading, isTransitioning, creditsLoading]);
+    return !!humanName.trim() && !isLoading && !isTransitioning;
+  }, [humanName, isLoading, isTransitioning]);
 
   const isAnyModalOpen =
     isSetupOpen ||
-    isAuthOpen ||
-    (REFERRAL_BONUS_ENABLED && isShareOpen) ||
-    isAccountOpen ||
-    isUserProfileOpen ||
     isSponsorOpen ||
-    (SPRING_CAMPAIGN_ENABLED && isSpringFestivalOpen) ||
     isGroupOpen ||
     isMobileMenuOpen ||
     isCustomCharacterOpen ||
-    isLowCreditOpen ||
+    isModelSettingsOpen ||
     isDevConsoleOpen;
 
   useEffect(() => {
@@ -587,42 +493,11 @@ export function WelcomeScreen({
     }
   };
 
-  const handleCreditFailure = () => {
-    setIsTransitioning(false);
-    onAbort?.();
-    if (REFERRAL_BONUS_ENABLED) {
-      setIsShareOpen(true);
-    } else {
-      setUserProfileDefaultTab("payAsYouGo");
-      setIsUserProfileOpen(true);
-    }
-    toast.error(t("welcome.toast.creditFail.title"), { description: t("welcome.toast.creditFail.description") });
-  };
-
   const handleConfirm = async () => {
     if (!canConfirm) {
       return;
     }
     if (isStartingRef.current) {
-      return;
-    }
-
-    if (!user) {
-      setIsAuthOpen(true);
-      toast(t("welcome.toast.signInFirst"));
-      return;
-    }
-
-    const hasUserKey = customKeyEnabled && (hasZenmuxKey() || hasDashscopeKey());
-
-    if (
-      !hasUserKey &&
-      credits !== null &&
-      credits <= LOW_CREDIT_THRESHOLD &&
-      !hasSpringQuota &&
-      !mayHaveUnclaimedSpringQuota
-    ) {
-      setIsLowCreditOpen(true);
       return;
     }
 
@@ -662,81 +537,7 @@ export function WelcomeScreen({
       });
     }, 800);
 
-    if (hasUserKey) {
-      isStartingRef.current = false;
-      return;
-    }
-
-    void consumeCredit()
-      .then((consumed) => {
-        if (consumed) return;
-        handleCreditFailure();
-      })
-      .catch(() => {
-        handleCreditFailure();
-      })
-      .finally(() => {
-        isStartingRef.current = false;
-      });
-  };
-
-  const handleOpenPayAsYouGo = () => {
-    setUserProfileDefaultTab("payAsYouGo");
-    setIsUserProfileOpen(true);
-  };
-
-  const handleStartGameFromLowCreditModal = () => {
-    isStartingRef.current = true;
-
-    const seal = sealButtonRef.current;
-    if (seal) createParticles(seal);
-
-    setIsTransitioning(true);
-
-    window.setTimeout(() => {
-      const roles = devTab === "roles" && devRoleOverrideEnabled && roleConfigValid ? (fixedRoles as Role[]) : undefined;
-      const preset = devTab === "preset" && devPreset ? (devPreset as DevPreset) : undefined;
-
-      const selectedCustomChars = customCharacters.characters
-        .filter(c => selectedCharacterIds.has(c.id))
-        .map(c => ({
-          id: c.id,
-          display_name: c.display_name,
-          gender: c.gender,
-          age: c.age,
-          mbti: c.mbti,
-          basic_info: c.basic_info,
-          style_label: c.style_label,
-          avatar_seed: c.avatar_seed,
-        }));
-
-      void onStart({
-        fixedRoles: roles,
-        devPreset: preset,
-        difficulty,
-        playerCount,
-        customCharacters: selectedCustomChars,
-        preferredRole: preferredRole || undefined,
-      });
-    }, 800);
-
-    const hasUserKey = customKeyEnabled && (hasZenmuxKey() || hasDashscopeKey());
-    if (hasUserKey) {
-      isStartingRef.current = false;
-      return;
-    }
-
-    void consumeCredit()
-      .then((consumed) => {
-        if (consumed) return;
-        handleCreditFailure();
-      })
-      .catch(() => {
-        handleCreditFailure();
-      })
-      .finally(() => {
-        isStartingRef.current = false;
-      });
+    isStartingRef.current = false;
   };
 
   const handleOpenGroup = () => {
@@ -786,47 +587,7 @@ export function WelcomeScreen({
           onAiVoiceEnabledChange={onAiVoiceEnabledChange}
           onAutoAdvanceDialogueEnabledChange={onAutoAdvanceDialogueEnabledChange}
         />
-        <AuthModal open={isAuthOpen} onOpenChange={setIsAuthOpen} />
-        <AccountModal open={isAccountOpen} onOpenChange={setIsAccountOpen} />
-        <UserProfileModal
-          open={isUserProfileOpen}
-          onOpenChange={(open) => {
-            setIsUserProfileOpen(open);
-            if (!open) setUserProfileDefaultTab(undefined);
-          }}
-          email={user?.email}
-          credits={credits ?? undefined}
-          springCampaign={springCampaign}
-          referralCode={referralCode}
-          totalReferrals={totalReferrals}
-          onChangePassword={() => setIsAccountOpen(true)}
-          onShareInvite={() => setIsShareOpen(true)}
-          onSignOut={signOut}
-          onRedeemCode={redeemCode}
-          onCustomKeyEnabledChange={setCustomKeyEnabled}
-          onCreditsChange={fetchCredits}
-          defaultTab={userProfileDefaultTab}
-        />
-        <LowCreditModal
-          open={isLowCreditOpen}
-          onOpenChange={setIsLowCreditOpen}
-          credits={credits ?? 0}
-          onStartGame={handleStartGameFromLowCreditModal}
-          onOpenPayAsYouGo={handleOpenPayAsYouGo}
-        />
-        <ResetPasswordModal
-          open={isPasswordRecovery}
-          onOpenChange={(open) => !open && clearPasswordRecovery()}
-          onSuccess={clearPasswordRecovery}
-        />
-        {REFERRAL_BONUS_ENABLED && (
-          <SharePanel
-            open={isShareOpen}
-            onOpenChange={setIsShareOpen}
-            referralCode={referralCode}
-            totalReferrals={totalReferrals}
-          />
-        )}
+
         <CustomCharacterModal
           open={isCustomCharacterOpen}
           onOpenChange={setIsCustomCharacterOpen}
@@ -839,6 +600,11 @@ export function WelcomeScreen({
           onCreateCharacter={customCharacters.createCharacter}
           onUpdateCharacter={customCharacters.updateCharacter}
           onDeleteCharacter={customCharacters.deleteCharacter}
+        />
+
+        <ModelSettingsModal
+          open={isModelSettingsOpen}
+          onOpenChange={setIsModelSettingsOpen}
         />
 
         <Dialog
@@ -916,48 +682,7 @@ export function WelcomeScreen({
           </DialogContent>
         </Dialog>
 
-        {SPRING_CAMPAIGN_ENABLED && (
-          <Dialog open={isSpringFestivalOpen} onOpenChange={setIsSpringFestivalOpen}>
-            <DialogContent className="max-w-[560px] overflow-hidden border-2 border-[var(--border-color)] bg-[var(--bg-card)] p-0">
-              <motion.div
-                initial={{ opacity: 0, y: 18, scale: 0.92, rotateX: -14, filter: "blur(8px)" }}
-                animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0, filter: "blur(0px)" }}
-                transition={{ duration: 0.55, ease: "easeOut" }}
-                style={{ transformOrigin: "top center", perspective: 1100 }}
-                className="relative"
-              >
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22),transparent_40%)]" />
-                <div className="bg-gradient-to-r from-[#8b1a1a] via-[#b4232b] to-[#8b1a1a] px-6 py-5 text-white">
-                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-white/80">
-                    <Sparkle size={14} weight="fill" />
-                    {t("welcome.springCampaign.modal.badge")}
-                  </div>
-                  <h3 className="mt-2 text-2xl font-semibold tracking-wide">
-                    {t("welcome.springCampaign.modal.title")}
-                  </h3>
-                  <p className="mt-1 text-sm text-white/90">
-                    {t("welcome.springCampaign.modal.subtitle")}
-                  </p>
-                </div>
-                <div className="space-y-3 px-6 py-5 text-sm">
-                  <p className="text-[var(--text-primary)]">{t("welcome.springCampaign.modal.line1")}</p>
-                  <p className="text-[var(--text-secondary)]">{t("welcome.springCampaign.modal.line2")}</p>
-                  <p className="text-[var(--text-secondary)]">{t("welcome.springCampaign.modal.line3")}</p>
-                  <div className="rounded-lg border border-[var(--border-color)] bg-white/60 px-3 py-2 text-xs text-[var(--text-secondary)]">
-                    {t("welcome.springCampaign.modal.note")}
-                  </div>
-                  <Button
-                    type="button"
-                    className="w-full bg-[#b4232b] text-white hover:bg-[#9f1f26]"
-                    onClick={() => setIsSpringFestivalOpen(false)}
-                  >
-                    {t("welcome.springCampaign.modal.action")}
-                  </Button>
-                </div>
-              </motion.div>
-            </DialogContent>
-          </Dialog>
-        )}
+
 
         <Dialog open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <DialogContent className="max-w-[420px]">
@@ -990,33 +715,20 @@ export function WelcomeScreen({
                 <GearSix size={16} />
                 {t("welcome.settings")}
               </Button>
-              {user ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="justify-start"
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsUserProfileOpen(true);
-                  }}
-                >
-                  <UserCircle size={16} />
-                  {t("welcome.account.info")}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="justify-start"
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsAuthOpen(true);
-                  }}
-                >
-                  <UserCircle size={16} />
-                  {t("welcome.auth.signIn")}
-                </Button>
-              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsModelSettingsOpen(true);
+                }}
+              >
+                <Robot size={16} />
+                {t("welcome.modelSettings")}
+              </Button>
+
               <Button asChild variant="outline" className="justify-start">
                 <a
                   href="https://github.com/oil-oil/wolfcha"
@@ -1112,48 +824,7 @@ export function WelcomeScreen({
               {t("welcome.group.title")}
             </Button>
 
-            {user ? (
-              <button
-                type="button"
-                onClick={() => setIsUserProfileOpen(true)}
-                className="hidden md:flex items-center gap-2 rounded-md border-2 border-[var(--border-color)] bg-[var(--bg-card)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                title={t("welcome.account.viewInfo")}
-              >
-                <UserCircle size={16} />
-                <span className="truncate max-w-[160px]">{user.email ?? t("userProfile.loggedIn")}</span>
-                {customKeyEnabled ? (
-                  <span className="opacity-70">{t("customKey.title")}</span>
-                ) : (
-                  <span className="opacity-70">
-                    {springCampaignActiveNow ? t("welcome.account.tempQuotaShort", { count: effectiveSpringRemainingQuota }) : null}
-                    {springCampaignActiveNow ? " · " : null}
-                    {t("welcome.account.remaining", { count: creditsLoading ? "..." : (credits ?? 0) })}
-                  </span>
-                )}
-              </button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAuthOpen(true)}
-                className="h-8 text-xs gap-2"
-              >
-                <UserCircle size={16} />
-                {t("welcome.auth.signIn")}
-              </Button>
-            )}
 
-            {user && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsUserProfileOpen(true)}
-                className="h-8 text-xs gap-2 md:hidden"
-              >
-                <UserCircle size={16} />
-                {t("welcome.account.info")}
-              </Button>
-            )}
 
             <Button
               type="button"
@@ -1163,6 +834,15 @@ export function WelcomeScreen({
             >
               <GearSix size={16} />
               {t("welcome.settings")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsModelSettingsOpen(true)}
+              className="h-8 text-xs gap-2"
+            >
+              <Robot size={16} />
+              {t("welcome.modelSettings")}
             </Button>
           </div>
 
@@ -1266,34 +946,7 @@ export function WelcomeScreen({
               <div className="wc-contract-subtitle">{t("welcome.subtitle")}</div>
             </div>
 
-            <div className="mt-5">
-              {springCampaignActiveNow ? (
-                <div className="relative rotate-[-1deg]">
-                  <div
-                    className="pointer-events-none absolute -top-2 left-6 h-4 w-20 rotate-[-6deg] rounded-sm border border-black/10 bg-white/60 shadow-sm"
-                    aria-hidden="true"
-                  />
-                  <div className="rounded-xl border border-[var(--border-color)] bg-white/60 px-4 py-3 shadow-[0_10px_24px_rgba(0,0,0,0.08)] backdrop-blur-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">
-                        {t("welcome.springCampaign.title")}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {t("welcome.springCampaign.range")}
-                      </p>
-                    </div>
-                    <p className="mt-1 text-xs leading-snug text-[var(--text-secondary)]">
-                      {user
-                        ? t("welcome.springCampaign.claimedStatus", {
-                          count: springCampaignActiveNow ? effectiveSpringRemainingQuota : SPRING_CAMPAIGN_DAILY_QUOTA,
-                          total: springCampaignActiveNow ? effectiveSpringTotalQuota : SPRING_CAMPAIGN_DAILY_QUOTA,
-                        })
-                        : t("welcome.springCampaign.signInHint")}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+
             <div className="mt-7 text-center wc-contract-body">
               <div className="wc-contract-oath">
                 {t("welcome.oath.line1")}
@@ -1341,37 +994,35 @@ export function WelcomeScreen({
 
 
             {/* Custom Character Entry */}
-            {user && (
-              <button
-                type="button"
-                onClick={() => setIsCustomCharacterOpen(true)}
-                className="mt-6 mx-auto flex items-center gap-2 px-3 py-1.5 rounded-md border-2 border-dashed border-[var(--border-color)] text-xs text-[var(--text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
-              >
-                <UsersFour size={14} />
-                <span>{t("customCharacter.entryButton")}</span>
-                {selectedCharacterIds.size > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white text-[10px] font-medium">
-                    {selectedCharacterIds.size}
-                  </span>
-                )}
-                {customCharacters.characters.length > 0 && selectedCharacterIds.size === 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-[var(--text-muted)]/20 text-[var(--text-muted)] text-[10px] font-medium">
-                    {customCharacters.characters.length}
-                  </span>
-                )}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsCustomCharacterOpen(true)}
+              className="mt-6 mx-auto flex items-center gap-2 px-3 py-1.5 rounded-md border-2 border-dashed border-[var(--border-color)] text-xs text-[var(--text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
+            >
+              <UsersFour size={14} />
+              <span>{t("customCharacter.entryButton")}</span>
+              {selectedCharacterIds.size > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white text-[10px] font-medium">
+                  {selectedCharacterIds.size}
+                </span>
+              )}
+              {customCharacters.characters.length > 0 && selectedCharacterIds.size === 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-[var(--text-muted)]/20 text-[var(--text-muted)] text-[10px] font-medium">
+                  {customCharacters.characters.length}
+                </span>
+              )}
+            </button>
 
             <div className="mt-4 flex flex-col items-center gap-3">
               <div className="wc-seal-hint">
-                {canConfirm ? t("welcome.sealHint.ready") : t("welcome.sealHint.waiting")}
+                {(mounted && canConfirm) ? t("welcome.sealHint.ready") : t("welcome.sealHint.waiting")}
               </div>
               <button
                 ref={sealButtonRef}
                 type="button"
                 className="wc-wax-seal"
                 onClick={handleConfirm}
-                disabled={!canConfirm}
+                disabled={!mounted || !canConfirm}
               >
                 <FingerprintSimple weight="fill" size={44} className="wc-wax-seal-icon" />
               </button>

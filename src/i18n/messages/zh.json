@@ -110,6 +110,7 @@
       "mailBody": "你好，我对 Wolfcha 项目很感兴趣，希望能够提供以下支持：\n\n-（模型额度/算力）\n-（语音/音效资源）\n-（设计/产品协作）\n-（其他）\n\n我的联系方式：\n\n"
     },
     "settings": "设置",
+    "modelSettings": "模型",
     "tutorial": "玩法教学",
     "subtitle": "The Shadow Game",
     "oath": {
@@ -2236,5 +2237,38 @@
     "recharge": "充值游戏额度",
     "startGame": "继续开始游戏",
     "startGameNoCredits": "充值游戏额度"
+  },
+  "modelSettings": {
+    "title": "AI 模型设置",
+    "description": "选择 AI 玩家使用的模型。可从已配置的提供商中选择一个或多个，游戏将随机分配给各 AI 角色。",
+    "descriptionLocked": "游戏进行中，模型设置无法修改。请在下局游戏开始前调整。",
+    "loading": "加载提供商状态……",
+    "status": {
+      "available": "已配置",
+      "notConfigured": "未配置"
+    },
+    "badge": {
+      "builtin": "内置"
+    },
+    "configureHint": {
+      "openai": "在服务器配置 OPENAI_API_KEY 以启用此提供商",
+      "google": "在服务器配置 GOOGLE_API_KEY 以启用此提供商",
+      "anthropic": "在服务器配置 ANTHROPIC_API_KEY 以启用此提供商",
+      "openaiCompatible": "在服务器配置 OPENAI_COMPATIBLE_API_KEY、OPENAI_COMPATIBLE_BASE_URL 与 OPENAI_COMPATIBLE_MODELS 以启用",
+      "default": "在 .env.local 中配置对应 API Key 以启用此提供商"
+    },
+    "footer": {
+      "allUsed": "未选择时，将从全部 {total} 个可用模型中随机分配",
+      "selectedCount": "已选 {count} / {total} 个模型，游戏将随机从中分配给 AI 玩家"
+    },
+    "actions": {
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "close": "关闭",
+      "save": "保存"
+    },
+    "toast": {
+      "saved": "模型设置已保存"
+    }
   }
 }

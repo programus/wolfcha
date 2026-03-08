@@ -9,7 +9,7 @@ import {
   type ModelRef,
   type Persona,
 } from "@/types/game";
-import { getGeneratorModel, getSelectedModels, hasDashscopeKey, hasZenmuxKey, isCustomKeyEnabled } from "@/lib/api-keys";
+import { getGeneratorModel, getPlayerModelSelection, hasDashscopeKey, hasZenmuxKey, isCustomKeyEnabled } from "@/lib/api-keys";
 import { aiLogger } from "./ai-logger";
 import { AI_TEMPERATURE, GAME_TEMPERATURE } from "./ai-config";
 import { getRandomScenario } from "./scenarios";
@@ -56,7 +56,35 @@ export const sampleModelRefs = (count: number): ModelRef[] => {
       : [{ provider: "zenmux" as const, model: GENERATOR_MODEL }];
 
   const pool = (() => {
-    if (!isCustomKeyEnabled()) return defaultPool;
+    if (!isCustomKeyEnabled()) {
+      // Server-direct provider models (openai/google/anthropic/openai-compatible) use
+      // server env var keys and are always available regardless of client-side custom key.
+      const serverDirectPool = filterPlayerModels(
+        ALL_MODELS.filter(
+          (ref) =>
+            ref.provider === "openai" ||
+            ref.provider === "google" ||
+            ref.provider === "anthropic" ||
+            ref.provider === "openai-compatible"
+        )
+      );
+      // Respect the project-level player model selection made in the Model Settings panel.
+      // Match against both built-in pool and server-direct models.
+      const selection = getPlayerModelSelection();
+      if (selection.length > 0) {
+        const fullCandidatePool = [...defaultPool, ...serverDirectPool];
+        const matched = fullCandidatePool.filter((ref) => selection.includes(ref.model));
+        // Models not found in any known pool are assumed to be dynamic openai-compatible models
+        // (configured via OPENAI_COMPATIBLE_MODELS env var and selected in Model Settings UI).
+        const knownModels = new Set(fullCandidatePool.map((ref) => ref.model));
+        const dynamicRefs: ModelRef[] = selection
+          .filter((m) => !knownModels.has(m))
+          .map((m) => ({ provider: "openai-compatible" as const, model: m }));
+        const allMatched = [...matched, ...dynamicRefs];
+        if (allMatched.length > 0) return allMatched;
+      }
+      return defaultPool;
+    }
 
     // When custom key is enabled, use ALL_MODELS as the full available pool
     const fullPool = ALL_MODELS.length > 0 ? ALL_MODELS : defaultPool;
@@ -73,7 +101,8 @@ export const sampleModelRefs = (count: number): ModelRef[] => {
     if (allowedPool.length === 0) return defaultPool;
 
     // Filter by user's selected models - STRICTLY respect user selection
-    const selectedModels = getSelectedModels();
+    // Use getPlayerModelSelection() — same storage key as ModelSettingsModal
+    const selectedModels = getPlayerModelSelection();
     if (selectedModels.length === 0) return allowedPool;
     
     // Only use models the user explicitly selected
@@ -291,6 +320,81 @@ const isValidBaseProfiles = (profiles: any, count: number): profiles is BaseProf
   return true;
 };
 
+// --- Programmatic sanitizers (no AI needed) ---
+
+const VALID_MBTI_TYPES = [
+  "INTJ","INTP","ENTJ","ENTP","INFJ","INFP","ENFJ","ENFP",
+  "ISTJ","ISFJ","ESTJ","ESFJ","ISTP","ISFP","ESTP","ESFP",
+];
+
+const randomMbti = () => VALID_MBTI_TYPES[Math.floor(Math.random() * VALID_MBTI_TYPES.length)];
+
+const sanitizeMbti = (v: any): string => {
+  if (typeof v !== "string") return randomMbti();
+  const upper = v.trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  if (isValidMbti(upper)) return upper;
+  return randomMbti();
+};
+
+const sanitizeAge = (v: any): number => {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return 20 + Math.floor(Math.random() * 25);
+  return Math.max(16, Math.min(70, Math.round(n)));
+};
+
+const sanitizeGender = (v: any): Gender => {
+  if (isValidGender(v)) return v;
+  if (typeof v === "string") {
+    const lower = v.toLowerCase().trim();
+    if (lower === "male" || lower === "m" || lower === "man") return "male";
+    if (lower === "female" || lower === "f" || lower === "woman") return "female";
+    if (lower.includes("non") || lower === "nb") return "nonbinary";
+  }
+  return (["male", "female"] as Gender[])[Math.floor(Math.random() * 2)];
+};
+
+/** Fix obvious field-level issues in base profiles that don't require AI. */
+const sanitizeBaseProfileList = (profiles: any[], count: number): BaseProfile[] => {
+  if (!Array.isArray(profiles) || profiles.length !== count) return profiles;
+  const seen = new Map<string, number>();
+  return profiles.map((p) => {
+    if (!p || typeof p !== "object") return p;
+    let name = typeof p.displayName === "string" ? p.displayName.trim() : "";
+    if (name) {
+      const prev = seen.get(name) ?? 0;
+      seen.set(name, prev + 1);
+      if (prev > 0) name = `${name}${prev + 1}`;
+    }
+    return {
+      ...p,
+      displayName: name,
+      age: sanitizeAge(p.age),
+      mbti: sanitizeMbti(p.mbti),
+      gender: sanitizeGender(p.gender),
+    } as BaseProfile;
+  });
+};
+
+/**
+ * Fix a persona so it matches the profile's source-of-truth fields.
+ * Returns null only if the persona object is entirely missing.
+ */
+const sanitizePersonaToMatchProfile = (persona: any, profile: BaseProfile): Persona | null => {
+  if (!persona || typeof persona !== "object") return null;
+  const voiceRules =
+    Array.isArray(persona.voiceRules) &&
+    persona.voiceRules.filter((x: any) => typeof x === "string" && x.trim()).length > 0
+      ? persona.voiceRules
+      : ["concise"];
+  return {
+    ...persona,
+    voiceRules,
+    gender: profile.gender,
+    age: profile.age,
+    mbti: profile.mbti,
+  };
+};
+
 const buildBaseProfilesPrompt = (count: number, scenario: GameScenario) => {
   const { t } = getI18n();
   return t("characterGenerator.baseProfilesPrompt", {
@@ -337,23 +441,6 @@ const isValidPersona = (p: any): p is Persona => {
   return true;
 };
 
-const isValidPersonaForProfile = (p: any, profile: BaseProfile): p is Persona => {
-  if (!isValidPersona(p)) return false;
-  if (p.gender !== profile.gender) return false;
-  if (p.age !== profile.age) return false;
-  if (String(p.mbti).trim() !== profile.mbti) return false;
-  return true;
-};
-
-const isValidCharacters = (chars: any, count: number): chars is GeneratedCharacter[] => {
-  if (!Array.isArray(chars) || chars.length !== count) return false;
-  return chars.every((c) => {
-    if (!c || typeof c !== "object") return false;
-    if (typeof (c as any).displayName !== "string" || !(c as any).displayName.trim()) return false;
-    return isValidPersona((c as any).persona);
-  });
-};
-
 const alignCharactersToProfiles = (
   chars: unknown,
   profiles: BaseProfile[]
@@ -371,8 +458,10 @@ const alignCharactersToProfiles = (
   for (const profile of profiles) {
     const key = profile.displayName.trim();
     const c = byName.get(key);
-    if (!c || !isValidPersonaForProfile(c.persona, profile)) return null;
-    ordered.push(c);
+    if (!c) return null;
+    const sanitizedPersona = sanitizePersonaToMatchProfile(c.persona, profile);
+    if (!sanitizedPersona) return null;
+    ordered.push({ ...c, persona: sanitizedPersona });
   }
   return ordered;
 };
@@ -480,7 +569,7 @@ export async function generateCharacters(
     });
 
     const normalizedBase = normalizeBaseProfiles(baseResult);
-    let baseProfiles = normalizedBase.profiles;
+    let baseProfiles = sanitizeBaseProfileList(normalizedBase.profiles, count);
 
     if (!isValidBaseProfiles(baseProfiles, count)) {
       const baseRepairPrompt = buildRepairBaseProfilesPrompt(count, usedScenario, normalizedBase.raw);
@@ -543,22 +632,23 @@ export async function generateCharacters(
             
             const profile = baseProfiles[profileIndex];
             
-            // 验证 persona 是否有效
-            if (isValidPersonaForProfile(c.persona, profile)) {
+            // 验证 persona 是否有效（并做程序修正）
+            const sanitizedPersona = sanitizePersonaToMatchProfile(c.persona, profile);
+            if (sanitizedPersona) {
               emittedIndices.add(profileIndex);
               
               const voiceId = resolveVoiceId(
-                c.persona.voiceId,
-                c.persona.gender,
-                c.persona.age,
+                sanitizedPersona.voiceId,
+                sanitizedPersona.gender,
+                sanitizedPersona.age,
                 "zh" as AppLocale
               );
 
               const character: GeneratedCharacter = {
                 displayName: profile.displayName,
                 persona: {
-                  ...c.persona,
-                  basicInfo: profile.basicInfo, // Carry over basicInfo from BaseProfile
+                  ...sanitizedPersona,
+                  basicInfo: profile.basicInfo,
                   voiceId,
                   relationships: undefined,
                 },
