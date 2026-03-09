@@ -214,7 +214,9 @@ export const buildAliveCountsSection = (state: GameState): string => {
   return t("promptUtils.aliveCounts", { count: alive.length });
 };
 
-/** Format structured vote_data into readable text for <history>. Seat numbers in vote_data are 0-based. */
+/** Format structured vote_data into readable text for <history>. Only sheriff election.
+ * Execution vote details are in <vote_history> block instead.
+ * Seat numbers in vote_data are 0-based. */
 function formatVoteDataForHistory(v: DailySummaryVoteData): string {
   const { t } = getI18n();
   const separator = t("promptUtils.gameContext.listSeparator");
@@ -234,12 +236,7 @@ function formatVoteDataForHistory(v: DailySummaryVoteData): string {
     const detail = fmt(votes);
     parts.push(detail ? `${base}${t("promptUtils.gameContext.semicolon")}${detail}` : base);
   }
-  if (v.execution_vote) {
-    const { eliminated, votes } = v.execution_vote;
-    const base = t("promptUtils.gameContext.executionVote", { seat: eliminated + 1 });
-    const detail = fmt(votes);
-    parts.push(detail ? `${base}${t("promptUtils.gameContext.semicolon")}${detail}` : base);
-  }
+  // execution_vote is intentionally omitted here — see <vote_history> block in gameContext.
   return parts.join(" ");
 }
 
@@ -607,7 +604,8 @@ export const buildGameContext = (
   const deadPlayers = state.players.filter((p) => !p.alive);
   const totalSeats = state.players.length;
   const publicGenericDeathCause = t("promptUtils.gameContext.deathCauseDeath");
-  const publicExecutionCause = publicGenericDeathCause;
+  const publicExecutionCause = t("promptUtils.gameContext.deathCauseVote");
+  const publicHunterCause = t("promptUtils.gameContext.deathCauseHunter");
 
   // === 第一优先级：角色私有信息（放在最前面） ===
   const privateInfo = buildRolePrivateInfo(state, player);
@@ -629,11 +627,11 @@ export const buildGameContext = (
           deathDay = Number(day);
         }
       }
-      if (history.hunterShot?.targetSeat === p.seat) { cause = publicGenericDeathCause; deathDay = Number(day); }
+      if (history.hunterShot?.targetSeat === p.seat) { cause = publicHunterCause; deathDay = Number(day); }
     }
     for (const [day, history] of Object.entries(state.dayHistory || {})) {
       if (history.executed?.seat === p.seat) { cause = publicExecutionCause; deathDay = Number(day); }
-      if (history.hunterShot?.targetSeat === p.seat) { cause = publicGenericDeathCause; deathDay = Number(day); }
+      if (history.hunterShot?.targetSeat === p.seat) { cause = publicHunterCause; deathDay = Number(day); }
     }
     return `{seat: ${p.seat + 1}, name: ${p.displayName}, day: ${deathDay}, cause: ${cause}}`;
   });
@@ -747,12 +745,24 @@ alive_count: ${alivePlayers.length}
           }
         });
       }
+      if (nightHistory?.hunterShot) {
+        const p = state.players.find(p => p.seat === nightHistory.hunterShot!.targetSeat);
+        if (p && !p.alive) {
+          currentDayDeaths.push(`{seat: ${p.seat + 1}, name: ${p.displayName}, cause: ${publicHunterCause}}`);
+        }
+      }
       const dayHistory = state.dayHistory?.[state.day];
       if (dayHistory?.executed && typeof dayHistory.executed.seat === 'number') {
         const executedSeat = dayHistory.executed.seat;
         const p = state.players.find(p => p.seat === executedSeat);
         if (p) {
           currentDayDeaths.push(`{seat: ${p.seat + 1}, name: ${p.displayName}, cause: ${publicExecutionCause}}`);
+        }
+      }
+      if (dayHistory?.hunterShot) {
+        const p = state.players.find(p => p.seat === dayHistory.hunterShot!.targetSeat);
+        if (p && !p.alive) {
+          currentDayDeaths.push(`{seat: ${p.seat + 1}, name: ${p.displayName}, cause: ${publicHunterCause}}`);
         }
       }
 
@@ -766,19 +776,17 @@ alive_count: ${alivePlayers.length}
   }
 
   if (state.voteHistory && Object.keys(state.voteHistory).length > 0) {
-    context += `\n\n<votes>`;
+    // Full per-voter execution vote history for all days (no compression).
+    // Sheriff election votes are in <history> instead.
+    context += `\n\n<vote_history>\n${t("promptUtils.gameContext.voteHistoryHeader")}`;
     const sheriffSeat = state.badge.holderSeat;
     const sheriffPlayer =
       sheriffSeat !== null ? state.players.find((p) => p.seat === sheriffSeat) : null;
     const sheriffPlayerId = sheriffPlayer?.playerId;
-    const currentDay = state.day;
-    
+
     Object.entries(state.voteHistory)
       .sort(([a], [b]) => Number(a) - Number(b))
       .forEach(([day, votes]) => {
-        const dayNum = Number(day);
-        const isRecent = currentDay - dayNum <= 1; // Recent 2 days show details
-        
         const voteGroups: Record<number, number[]> = {};
         Object.entries(votes).forEach(([voterId, targetSeat]) => {
           const voter = state.players.find(p => p.playerId === voterId);
@@ -787,8 +795,7 @@ alive_count: ${alivePlayers.length}
             voteGroups[targetSeat].push(voter.seat);
           }
         });
-        
-        // Sort by vote count descending
+
         const sortedTargets = Object.entries(voteGroups)
           .map(([target, voters]) => {
             const weightedVotes = voters.reduce((sum, seat) => {
@@ -799,39 +806,16 @@ alive_count: ${alivePlayers.length}
             return { target: Number(target), voters, weightedVotes };
           })
           .sort((a, b) => b.weightedVotes - a.weightedVotes);
-        
-        if (isRecent) {
-          // Recent days: show full details in YAML format
-          context += `\nday_${day}:`;
-          sortedTargets.forEach(({ target, voters, weightedVotes }) => {
-            const targetPlayer = state.players.find(p => p.seat === target);
-            const voteLabel = Number.isInteger(weightedVotes) ? `${weightedVotes}` : weightedVotes.toFixed(1);
-            const voterList = voters.map(s => s + 1).join(',');
-            context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: target + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voteLabel}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
-          });
-        } else {
-          // Older days: compressed summary
-          const dayHistory = state.dayHistory?.[dayNum];
-          if (dayHistory?.executed) {
-            const executedSeat = dayHistory.executed.seat;
-            const executedPlayer = state.players.find(p => p.seat === executedSeat);
-            const topVoter = sortedTargets[0]?.voters[0];
-            const leaderSeat = topVoter !== undefined ? topVoter + 1 : null;
-            context += `\nday_${day}: {${t("promptUtils.gameContext.eliminated").trim()}: ${t("promptUtils.gameContext.seatLabel", { seat: executedSeat + 1 })}${executedPlayer?.displayName || ''}, ${t("promptUtils.gameContext.voteCount")}: ${dayHistory.executed.votes}${leaderSeat ? `, ${t("promptUtils.gameContext.mainVoter")}: ${t("promptUtils.gameContext.seatLabel", { seat: leaderSeat })}` : ''}}`;
-          } else if (dayHistory?.voteTie) {
-            context += `\nday_${day}: {${t("promptUtils.gameContext.result")}: ${t("promptUtils.gameContext.tie")}}`;
-          } else if (sortedTargets.length > 0) {
-            // 即使没有 dayHistory，也显示投票信息（防止投票信息丢失）
-            const topTarget = sortedTargets[0];
-            const targetPlayer = state.players.find(p => p.seat === topTarget.target);
-            const topVoter = topTarget.voters[0];
-            const leaderSeat = topVoter !== undefined ? topVoter + 1 : null;
-            const voteLabel = Number.isInteger(topTarget.weightedVotes) ? `${topTarget.weightedVotes}` : topTarget.weightedVotes.toFixed(1);
-            context += `\nday_${day}: {${t("promptUtils.gameContext.eliminated").trim()}: ${t("promptUtils.gameContext.seatLabel", { seat: topTarget.target + 1 })}${targetPlayer?.displayName || ''}, ${t("promptUtils.gameContext.voteCount")}: ${voteLabel}${leaderSeat ? `, ${t("promptUtils.gameContext.mainVoter")}: ${t("promptUtils.gameContext.seatLabel", { seat: leaderSeat })}` : ''}}`;
-          }
-        }
+
+        context += `\nday_${day}:`;
+        sortedTargets.forEach(({ target, voters, weightedVotes }) => {
+          const targetPlayer = state.players.find(p => p.seat === target);
+          const voteLabel = Number.isInteger(weightedVotes) ? `${weightedVotes}` : weightedVotes.toFixed(1);
+          const voterList = voters.map(s => s + 1).join(',');
+          context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: target + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voteLabel}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
+        });
       });
-    context += `\n</votes>`;
+    context += `\n</vote_history>`;
   }
 
   // NOTE: Role-specific private information is now at the TOP of the context

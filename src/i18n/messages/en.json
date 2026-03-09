@@ -1710,7 +1710,7 @@
         "other": "eliminated"
       },
       "todayDeaths": "【Deaths today】\n{lines}",
-      "voteHistoryHeader": "【Vote history】",
+      "voteHistoryHeader": "Execution vote details per day (who voted for whom):",
       "voteDayHeader": "Day {day} votes:",
       "voteGroup": "Seat {seat} {name} ({count} votes): {voters}",
       "seatName": "Seat {seat} {name}",
@@ -1749,7 +1749,8 @@
       "deathCauseWolf": "wolf kill",
       "deathCausePoison": "poisoned",
       "deathCauseVote": "voted out",
-      "deathCauseDeath": "death",
+      "deathCauseHunter": "hunter shot",
+      "deathCauseDeath": "night death",
       "deathCauseUnknown": "unknown",
       "noSheriff": "none",
       "voteCount": "votes",
