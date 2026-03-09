@@ -1493,20 +1493,6 @@ export function useGameLogic() {
         });
       } else {
         characters = await generateCharacters(numAiPlayers, scenario, {
-          onBaseProfiles: (profiles) => {
-            profiles.forEach((p, i) => {
-              const seat = aiSeatOrder[i] ?? i + 1;
-              window.setTimeout(() => {
-                setGameState((prev) => {
-                  const nextPlayers = prev.players.map((pl) => {
-                    if (pl.seat === seat) return { ...pl, displayName: p.displayName };
-                    return pl;
-                  });
-                  return { ...prev, players: nextPlayers };
-                });
-              }, 420 + i * 260);
-            });
-          },
           onCharacter: (index, character) => {
             const seat = aiSeatOrder[index] ?? index + 1;
             window.setTimeout(() => {

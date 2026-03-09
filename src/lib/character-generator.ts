@@ -280,45 +280,7 @@ export interface BaseProfile {
   basicInfo: string;
 }
 
-interface BaseProfilesResponse {
-  profiles: BaseProfile[];
-}
-
-const normalizeBaseProfiles = (result: unknown): { profiles: BaseProfile[]; raw: unknown } => {
-  if (result && typeof result === "object" && "profiles" in result && Array.isArray((result as any).profiles)) {
-    return { profiles: (result as BaseProfilesResponse).profiles, raw: result };
-  }
-
-  if (Array.isArray(result)) {
-    if (result.length > 0 && typeof result[0] === "object" && result[0] && "displayName" in (result[0] as any)) {
-      return { profiles: result as BaseProfile[], raw: result };
-    }
-    return { profiles: [], raw: result };
-  }
-
-  return { profiles: [], raw: result };
-};
-
 const isValidGender = (g: any): g is Gender => g === "male" || g === "female" || g === "nonbinary";
-
-const isValidBaseProfiles = (profiles: any, count: number): profiles is BaseProfile[] => {
-  if (!Array.isArray(profiles) || profiles.length !== count) return false;
-  const ok = profiles.every((p) => {
-    if (!p || typeof p !== "object") return false;
-    if (typeof (p as any).displayName !== "string" || !(p as any).displayName.trim()) return false;
-    if (!isValidGender((p as any).gender)) return false;
-    if (typeof (p as any).age !== "number" || !Number.isFinite((p as any).age) || (p as any).age < 16 || (p as any).age > 70) return false;
-    if (!isValidMbti((p as any).mbti)) return false;
-    if (typeof (p as any).basicInfo !== "string" || !(p as any).basicInfo.trim()) return false;
-    return true;
-  });
-
-  if (!ok) return false;
-  const names = profiles.map((p: any) => String(p.displayName).trim()).filter(Boolean);
-  if (names.length !== count) return false;
-  if (new Set(names).size !== count) return false;
-  return true;
-};
 
 // --- Programmatic sanitizers (no AI needed) ---
 
@@ -353,28 +315,6 @@ const sanitizeGender = (v: any): Gender => {
   return (["male", "female"] as Gender[])[Math.floor(Math.random() * 2)];
 };
 
-/** Fix obvious field-level issues in base profiles that don't require AI. */
-const sanitizeBaseProfileList = (profiles: any[], count: number): BaseProfile[] => {
-  if (!Array.isArray(profiles) || profiles.length !== count) return profiles;
-  const seen = new Map<string, number>();
-  return profiles.map((p) => {
-    if (!p || typeof p !== "object") return p;
-    let name = typeof p.displayName === "string" ? p.displayName.trim() : "";
-    if (name) {
-      const prev = seen.get(name) ?? 0;
-      seen.set(name, prev + 1);
-      if (prev > 0) name = `${name}${prev + 1}`;
-    }
-    return {
-      ...p,
-      displayName: name,
-      age: sanitizeAge(p.age),
-      mbti: sanitizeMbti(p.mbti),
-      gender: sanitizeGender(p.gender),
-    } as BaseProfile;
-  });
-};
-
 /**
  * Fix a persona so it matches the profile's source-of-truth fields.
  * Returns null only if the persona object is entirely missing.
@@ -395,14 +335,100 @@ const sanitizePersonaToMatchProfile = (persona: any, profile: BaseProfile): Pers
   };
 };
 
-const buildBaseProfilesPrompt = (count: number, scenario: GameScenario) => {
+const buildCombinedCharactersPrompt = (count: number, scenario: GameScenario) => {
   const { t } = getI18n();
-  return t("characterGenerator.baseProfilesPrompt", {
+  return t("characterGenerator.combinedCharactersPrompt", {
     count,
     title: scenario.title,
     description: scenario.description,
     rolesHint: scenario.rolesHint,
   });
+};
+
+/**
+ * Extract top-level character objects from a partial JSON stream.
+ * Relies on `{ "characters": [ {...}, {...} ] }` structure from the LLM.
+ * Objects at brace-depth 2 (inside the characters array) are extracted as candidates.
+ */
+const extractCompleteCharacterObjects = (content: string): string[] => {
+  const results: string[] = [];
+  let depth = 0;
+  let objectStart = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+
+    if (ch === "{") {
+      depth++;
+      if (depth === 2) objectStart = i;
+    } else if (ch === "}") {
+      if (depth === 2 && objectStart !== -1) {
+        results.push(content.slice(objectStart, i + 1));
+        objectStart = -1;
+      }
+      depth--;
+    }
+  }
+
+  return results;
+};
+
+/**
+ * Build a GeneratedCharacter from a raw combined object that has top-level
+ * gender/age/mbti/basicInfo fields alongside persona.voiceRules.
+ */
+const buildCharacterFromCombined = (
+  parsed: unknown,
+  locale: AppLocale
+): GeneratedCharacter | null => {
+  if (!parsed || typeof parsed !== "object") return null;
+  const p = parsed as Record<string, unknown>;
+
+  const displayName = typeof p.displayName === "string" ? p.displayName.trim() : "";
+  if (!displayName) return null;
+
+  const basicInfo = typeof p.basicInfo === "string" ? p.basicInfo.trim() : "";
+  if (!basicInfo) return null;
+
+  if (!p.persona || typeof p.persona !== "object") return null;
+
+  const baseProfile: BaseProfile = {
+    displayName,
+    gender: sanitizeGender(p.gender),
+    age: sanitizeAge(p.age),
+    mbti: sanitizeMbti(p.mbti),
+    basicInfo,
+  };
+
+  const sanitizedPersona = sanitizePersonaToMatchProfile(p.persona, baseProfile);
+  if (!sanitizedPersona) return null;
+
+  const voiceId = resolveVoiceId(
+    sanitizedPersona.voiceId,
+    sanitizedPersona.gender,
+    sanitizedPersona.age,
+    locale
+  );
+
+  return {
+    displayName,
+    persona: {
+      ...sanitizedPersona,
+      basicInfo,
+      voiceId,
+      relationships: undefined,
+    },
+  };
 };
 
 const normalizeGeneratedCharacters = (
@@ -426,75 +452,7 @@ const normalizeGeneratedCharacters = (
   return { characters: [], raw: result };
 };
 
-const isValidPersona = (p: any): p is Persona => {
-  if (!p || typeof p !== "object") return false;
-  // styleLabel is now optional
-  if (p.styleLabel !== undefined && typeof p.styleLabel !== "string") return false;
-  if (!Array.isArray(p.voiceRules) || p.voiceRules.filter((x: any) => typeof x === "string" && x.trim()).length === 0) return false;
-  if (!isValidMbti(p.mbti)) return false;
-  if (!isValidGender(p.gender)) return false;
-  if (typeof p.age !== "number" || !Number.isFinite(p.age) || p.age < 16 || p.age > 70) return false;
-  if (p.relationships !== undefined) {
-    if (!Array.isArray(p.relationships)) return false;
-    if (p.relationships.some((x: any) => typeof x !== "string")) return false;
-  }
-  return true;
-};
-
-const alignCharactersToProfiles = (
-  chars: unknown,
-  profiles: BaseProfile[]
-): GeneratedCharacter[] | null => {
-  if (!Array.isArray(chars) || chars.length !== profiles.length) return null;
-  const byName = new Map<string, GeneratedCharacter>();
-  for (const c of chars as GeneratedCharacter[]) {
-    if (!c || typeof c !== "object") return null;
-    const name = typeof c.displayName === "string" ? c.displayName.trim() : "";
-    if (!name) return null;
-    if (byName.has(name)) return null;
-    byName.set(name, c);
-  }
-  const ordered: GeneratedCharacter[] = [];
-  for (const profile of profiles) {
-    const key = profile.displayName.trim();
-    const c = byName.get(key);
-    if (!c) return null;
-    const sanitizedPersona = sanitizePersonaToMatchProfile(c.persona, profile);
-    if (!sanitizedPersona) return null;
-    ordered.push({ ...c, persona: sanitizedPersona });
-  }
-  return ordered;
-};
-
-const buildFullPersonasPrompt = (scenario: GameScenario, allProfiles: BaseProfile[]) => {
-  const { t } = getI18n();
-  const roster = allProfiles
-    .map((p, i) =>
-      t("characterGenerator.rosterLine", {
-        index: i + 1,
-        name: p.displayName,
-        gender: p.gender,
-        age: p.age,
-        basicInfo: p.basicInfo,
-      })
-    )
-    .join("\n");
-
-  // Removed styleLabel from schema - only voiceRules needed for speech style
-  const schema = allProfiles
-    .map((p) => `  { "displayName": "${p.displayName}", "persona": { "voiceRules": string[], "mbti": "${p.mbti}", "gender": "${p.gender}", "age": ${p.age} } }`)
-    .join(",\n");
-
-  return t("characterGenerator.fullPersonasPrompt", {
-    title: scenario.title,
-    description: scenario.description,
-    roster,
-    count: allProfiles.length,
-    schema,
-  });
-};
-
-const buildRepairBaseProfilesPrompt = (count: number, scenario: GameScenario, raw: unknown) => {
+const buildRepairCombinedCharactersPrompt = (count: number, scenario: GameScenario, raw: unknown) => {
   const { t } = getI18n();
   const rawStr = (() => {
     try {
@@ -504,47 +462,11 @@ const buildRepairBaseProfilesPrompt = (count: number, scenario: GameScenario, ra
     }
   })();
 
-  return t("characterGenerator.repairBaseProfilesPrompt", {
+  return t("characterGenerator.repairCombinedCharactersPrompt", {
     count,
     title: scenario.title,
     description: scenario.description,
     raw: rawStr,
-  });
-};
-
-const buildRepairFullPersonasPrompt = (scenario: GameScenario, allProfiles: BaseProfile[], raw: unknown) => {
-  const { t } = getI18n();
-  const rawStr = (() => {
-    try {
-      return JSON.stringify(raw);
-    } catch {
-      return String(raw);
-    }
-  })();
-
-  const roster = allProfiles
-    .map((p, i) =>
-      t("characterGenerator.rosterLineSimple", {
-        index: i + 1,
-        name: p.displayName,
-        gender: p.gender,
-        basicInfo: p.basicInfo,
-      })
-    )
-    .join("\n");
-
-  // Removed styleLabel from schema - only voiceRules needed for speech style
-  const schema = allProfiles
-    .map((p) => `  { "displayName": "${p.displayName}", "persona": { "voiceRules": string[], "mbti": "${p.mbti}", "gender": "${p.gender}", "age": ${p.age} } }`)
-    .join(",\n");
-
-  return t("characterGenerator.repairFullPersonasPrompt", {
-    title: scenario.title,
-    description: scenario.description,
-    roster,
-    raw: rawStr,
-    count: allProfiles.length,
-    schema,
   });
 };
 
@@ -559,128 +481,73 @@ export async function generateCharacters(
   const usedScenario = scenario ?? getRandomScenario();
   const runOnce = async () => {
     const startTime = Date.now();
-    const basePrompt = buildBaseProfilesPrompt(count, usedScenario);
+    const { locale } = getI18n();
+    const prompt = buildCombinedCharactersPrompt(count, usedScenario);
 
-    const baseResult = await generateJSON<unknown>({
-      model: getGeneratorModel(),
-      messages: [{ role: "user", content: basePrompt }],
-      temperature: GAME_TEMPERATURE.CHARACTER_GENERATION,
-      max_tokens: 1200,
-    });
-
-    const normalizedBase = normalizeBaseProfiles(baseResult);
-    let baseProfiles = sanitizeBaseProfileList(normalizedBase.profiles, count);
-
-    if (!isValidBaseProfiles(baseProfiles, count)) {
-      const baseRepairPrompt = buildRepairBaseProfilesPrompt(count, usedScenario, normalizedBase.raw);
-      const baseRepaired = await generateJSON<unknown>({
-        model: getGeneratorModel(),
-        messages: [{ role: "user", content: baseRepairPrompt }],
-        temperature: GAME_TEMPERATURE.CHARACTER_REPAIR,
-        max_tokens: 1200,
-      });
-
-      const normalizedBaseRepaired = normalizeBaseProfiles(baseRepaired);
-      baseProfiles = normalizedBaseRepaired.profiles;
-
-      if (!isValidBaseProfiles(baseProfiles, count)) {
-        throw new Error("Base profile generation returned invalid schema after repair");
-      }
-    }
-
-    options?.onBaseProfiles?.(baseProfiles);
-
-    const fullPrompt = buildFullPersonasPrompt(usedScenario, baseProfiles);
-    
-    // 使用流式生成，每解析出一个角色就立即调用回调
-    const finalizedCharacters: GeneratedCharacter[] = [];
-    const emittedIndices = new Set<number>();
+    const finalizedCharacters: (GeneratedCharacter | undefined)[] = new Array(count).fill(undefined);
+    const emittedNames = new Set<string>();
+    let nextIndex = 0;
     let accumulatedContent = "";
-    const parser = new LLMJSONParser();
-    
+    let processedCandidateCount = 0;
+
     const stream = generateCompletionStream({
       model: getGeneratorModel(),
-      messages: [{ role: "user", content: fullPrompt }],
+      messages: [{ role: "user", content: prompt }],
       temperature: GAME_TEMPERATURE.CHARACTER_GENERATION,
       max_tokens: 6000,
     });
 
     for await (const chunk of stream) {
       accumulatedContent += chunk;
-      
-      // 使用正则提取完整的角色对象
-      // 匹配 {"displayName": "...", "persona": {...}} 结构
       const cleaned = stripMarkdownCodeFences(accumulatedContent);
-      
-      // 找到所有可能完整的角色对象
-      // 通过匹配 displayName 后跟 persona 对象的闭合 } 来识别完整角色
-      const characterPattern = /\{\s*"displayName"\s*:\s*"[^"]+"\s*,\s*"persona"\s*:\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}\s*\}/g;
-      const matches = cleaned.match(characterPattern);
-      
-      if (matches) {
-        for (const match of matches) {
-          try {
-            const c = JSON.parse(match) as GeneratedCharacter;
-            if (!c.displayName || !c.persona) continue;
-            
-            // 找到对应的 profile index
-            const profileIndex = baseProfiles.findIndex(p => 
-              p.displayName === c.displayName && !emittedIndices.has(baseProfiles.indexOf(p))
-            );
-            
-            if (profileIndex === -1) continue;
-            
-            const profile = baseProfiles[profileIndex];
-            
-            // 验证 persona 是否有效（并做程序修正）
-            const sanitizedPersona = sanitizePersonaToMatchProfile(c.persona, profile);
-            if (sanitizedPersona) {
-              emittedIndices.add(profileIndex);
-              
-              const voiceId = resolveVoiceId(
-                sanitizedPersona.voiceId,
-                sanitizedPersona.gender,
-                sanitizedPersona.age,
-                "zh" as AppLocale
-              );
+      const candidates = extractCompleteCharacterObjects(cleaned);
 
-              const character: GeneratedCharacter = {
-                displayName: profile.displayName,
-                persona: {
-                  ...sanitizedPersona,
-                  basicInfo: profile.basicInfo,
-                  voiceId,
-                  relationships: undefined,
-                },
-              };
+      for (let ci = processedCandidateCount; ci < candidates.length; ci++) {
+        try {
+          const parsed = JSON.parse(candidates[ci]);
+          if (!parsed.displayName || emittedNames.has(parsed.displayName)) continue;
 
-              finalizedCharacters[profileIndex] = character;
-              options?.onCharacter?.(profileIndex, character);
-              console.log(`[character-gen] emitted character ${profileIndex}: ${character.displayName}`);
-            }
-          } catch {
-            // 解析失败是正常的
-          }
+          const character = buildCharacterFromCombined(parsed, locale as AppLocale);
+          if (!character) continue;
+
+          emittedNames.add(character.displayName);
+          const index = nextIndex++;
+          finalizedCharacters[index] = character;
+          options?.onCharacter?.(index, character);
+          console.log(`[character-gen] streamed character ${index}: ${character.displayName}`);
+        } catch {
+          // partial parse — skip
         }
       }
+      processedCandidateCount = candidates.length;
     }
 
-    // 流式结束后，检查是否所有角色都已生成
-    if (finalizedCharacters.filter(Boolean).length < baseProfiles.length) {
-      // 回退到完整解析
+    // Fallback: try full parse if stream didn't yield all characters
+    if (finalizedCharacters.filter(Boolean).length < count) {
       const cleaned = stripMarkdownCodeFences(accumulatedContent);
       let fullResult: unknown;
       try {
         fullResult = JSON.parse(cleaned);
       } catch {
+        const parser = new LLMJSONParser();
         fullResult = parser.parse(cleaned);
       }
-      
-      const normalized = normalizeGeneratedCharacters(fullResult);
-      let alignedCharacters = alignCharactersToProfiles(normalized.characters, baseProfiles);
 
-      if (!alignedCharacters) {
-        const repairPrompt = buildRepairFullPersonasPrompt(usedScenario, baseProfiles, normalized.raw);
+      const normalized = normalizeGeneratedCharacters(fullResult);
+      for (const c of normalized.characters) {
+        if (nextIndex >= count) break;
+        if (!c.displayName || emittedNames.has(c.displayName)) continue;
+        const character = buildCharacterFromCombined(c, locale as AppLocale);
+        if (!character) continue;
+        emittedNames.add(character.displayName);
+        const index = nextIndex++;
+        finalizedCharacters[index] = character;
+        options?.onCharacter?.(index, character);
+      }
+
+      // Repair call if still incomplete
+      if (finalizedCharacters.filter(Boolean).length < count) {
+        const repairPrompt = buildRepairCombinedCharactersPrompt(count, usedScenario, normalized.raw);
         const repaired = await generateJSON<unknown>({
           model: getGeneratorModel(),
           messages: [{ role: "user", content: repairPrompt }],
@@ -689,54 +556,48 @@ export async function generateCharacters(
         });
 
         const normalizedRepaired = normalizeGeneratedCharacters(repaired);
-        alignedCharacters = alignCharactersToProfiles(normalizedRepaired.characters, baseProfiles);
-
-        if (!alignedCharacters) {
-          throw new Error("Character generation returned invalid schema after repair");
+        for (const c of normalizedRepaired.characters) {
+          if (nextIndex >= count) break;
+          if (!c.displayName || emittedNames.has(c.displayName)) continue;
+          const character = buildCharacterFromCombined(c, locale as AppLocale);
+          if (!character) continue;
+          emittedNames.add(character.displayName);
+          const index = nextIndex++;
+          finalizedCharacters[index] = character;
+          options?.onCharacter?.(index, character);
         }
-      }
-
-      // 补充未生成的角色
-      for (let i = 0; i < alignedCharacters.length; i++) {
-        if (finalizedCharacters[i]) continue;
-        
-        const c = alignedCharacters[i];
-        const profile = baseProfiles[i];
-        const voiceId = resolveVoiceId(
-          c.persona.voiceId,
-          c.persona.gender,
-          c.persona.age,
-          "zh" as AppLocale
-        );
-
-        const character: GeneratedCharacter = {
-          displayName: profile.displayName,
-          persona: {
-            ...c.persona,
-            basicInfo: profile.basicInfo, // Carry over basicInfo from BaseProfile
-            voiceId,
-            relationships: undefined,
-          },
-        };
-
-        finalizedCharacters[i] = character;
-        options?.onCharacter?.(i, character);
       }
     }
 
+    const result = finalizedCharacters.filter(Boolean) as GeneratedCharacter[];
+    if (result.length < count) {
+      throw new Error(`Character generation returned only ${result.length}/${count} characters after repair`);
+    }
+
+    // Call onBaseProfiles for backward compatibility, derived from finalized characters
+    options?.onBaseProfiles?.(
+      result.map((c) => ({
+        displayName: c.displayName,
+        gender: c.persona.gender as Gender,
+        age: c.persona.age,
+        mbti: c.persona.mbti,
+        basicInfo: c.persona.basicInfo ?? "",
+      }))
+    );
+
     await aiLogger.log({
       type: "character_generation",
-      request: { 
+      request: {
         model: getGeneratorModel(),
-        messages: [{ role: "user", content: fullPrompt }],
+        messages: [{ role: "user", content: prompt }],
       },
-      response: { 
-        content: JSON.stringify(finalizedCharacters.map(c => c.displayName)), 
-        duration: Date.now() - startTime 
+      response: {
+        content: JSON.stringify(result.map((c) => c.displayName)),
+        duration: Date.now() - startTime,
       },
     });
 
-    return finalizedCharacters;
+    return finalizedCharacters as GeneratedCharacter[];
   };
 
   let lastError: unknown;
@@ -747,27 +608,27 @@ export async function generateCharacters(
     } catch (error) {
       lastError = error;
       console.error(`[character-gen] Attempt ${attempt + 1} failed:`, error);
-      
+
       const errorMsg = String(error);
-      const isQuotaError = errorMsg.includes("[QUOTA_EXHAUSTED]") || 
-                          errorMsg.includes("402") || 
+      const isQuotaError = errorMsg.includes("[QUOTA_EXHAUSTED]") ||
+                          errorMsg.includes("402") ||
                           errorMsg.includes("insufficient") ||
                           errorMsg.includes("余额");
-      
+
       if (isCustomKeyEnabled() && isQuotaError) {
         console.error("[character-gen] Custom key quota exhausted, aborting retry");
         throw error;
       }
-      
+
       if (attempt === 0) {
         continue;
       }
       console.error("Character generation failed:", error);
       await aiLogger.log({
         type: "character_generation",
-        request: { 
+        request: {
           model: GENERATOR_MODEL,
-          messages: [{ role: "user", content: "(two-stage generation)" }],
+          messages: [{ role: "user", content: "(single-pass generation)" }],
         },
         response: { content: "[]", duration: 0 },
         error: String(error),
@@ -777,3 +638,4 @@ export async function generateCharacters(
 
   throw lastError;
 }
+
