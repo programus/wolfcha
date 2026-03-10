@@ -1024,18 +1024,65 @@ export async function generateAISpeechSegmentsStream(
     let accumulatedContent = "";
     let chunkCount = 0;
 
+    // Stateful <think>...</think> block stripper to prevent thinking tokens from
+    // delaying JSON array detection in the streaming parser.
+    let thinkBuffer = "";
+    let inThinkBlock = false;
+
     for await (const chunk of stream) {
       chunkCount++;
-      accumulatedContent += chunk;
-      parser.processChunk(chunk);
-      
+
+      // Strip <think>...</think> blocks chunk-by-chunk before feeding the parser.
+      // Tags may be split across chunks, so we buffer up to tag-length chars.
+      thinkBuffer += chunk;
+      let processedChunk = "";
+
+      while (thinkBuffer.length > 0) {
+        if (inThinkBlock) {
+          const endIdx = thinkBuffer.indexOf("</think>");
+          if (endIdx >= 0) {
+            inThinkBlock = false;
+            thinkBuffer = thinkBuffer.slice(endIdx + 8); // "<\/think>".length === 8
+          } else {
+            // Keep the last 7 chars buffered — they may be a partial "</think>" tag.
+            if (thinkBuffer.length > 7) thinkBuffer = thinkBuffer.slice(-7);
+            break;
+          }
+        } else {
+          const startIdx = thinkBuffer.indexOf("<think>");
+          if (startIdx >= 0) {
+            processedChunk += thinkBuffer.slice(0, startIdx);
+            inThinkBlock = true;
+            thinkBuffer = thinkBuffer.slice(startIdx + 7); // "<think>".length === 7
+          } else {
+            // Guard: hold back the last 6 chars in case a "<think>" tag is split.
+            if (thinkBuffer.length > 6) {
+              processedChunk += thinkBuffer.slice(0, -6);
+              thinkBuffer = thinkBuffer.slice(-6);
+            }
+            break;
+          }
+        }
+      }
+
+      if (processedChunk) {
+        accumulatedContent += processedChunk;
+        parser.processChunk(processedChunk);
+      }
+
       // 调试：每10个chunk输出一次
       if (chunkCount % 10 === 0) {
         console.log(`[streaming] chunks: ${chunkCount}, accumulated: ${accumulatedContent.length} chars, segments: ${parser.getSegmentCount()}`);
       }
     }
-    
-    console.log(`[streaming] done. total chunks: ${chunkCount}, segments emitted: ${parser.getSegmentCount()}, unique emitted: ${emittedSegments.size}`);
+
+    // Flush any remaining buffered content (not inside a think block).
+    if (!inThinkBlock && thinkBuffer) {
+      accumulatedContent += thinkBuffer;
+      parser.processChunk(thinkBuffer);
+    }
+
+    console.log(`[streaming] done. total chunks: ${chunkCount}, accumulated: ${accumulatedContent.length} chars, segments emitted: ${parser.getSegmentCount()}, unique emitted: ${emittedSegments.size}`);
 
     // 结束解析
     const segments = parser.end();
