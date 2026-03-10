@@ -687,7 +687,8 @@
     "totalVotes": "总票数 {count}",
     "waiting": "等待投票中...",
     "waitingLabel": "等待中:",
-    "youSuffix": "(你)"
+    "youSuffix": "(你)",
+    "yourVote": "你投了: {seat}号 {name}"
   },
   "persona": {
     "strategy": {

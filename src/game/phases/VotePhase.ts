@@ -87,27 +87,33 @@ export class VotePhase extends GamePhase {
     let tokenInvalidated = false;
     setIsWaitingForAI(true);
     try {
-      for (const aiPlayer of aiPlayers) {
-        if (!isTokenValid(token)) {
-          tokenInvalidated = true;
-          break;
+      // All AI players vote in parallel — votes are intentionally hidden from prompts so
+      // each player can safely use the same snapshot state for independent decisions.
+      const snapshotState = currentState;
+      const results = await Promise.allSettled(
+        aiPlayers.map(async (aiPlayer) => {
+          const vote = await generateAIVote(snapshotState, aiPlayer);
+          // Update voted count in UI as each response arrives (breakdown is hidden by VotingProgress)
+          setGameState((prevState) => ({
+            ...prevState,
+            votes: { ...prevState.votes, [aiPlayer.playerId]: vote.seat },
+            voteReasons: { ...(prevState.voteReasons || {}), [aiPlayer.playerId]: vote.reason },
+          }));
+          return { aiPlayer, vote };
+        })
+      );
+      if (!isTokenValid(token)) {
+        tokenInvalidated = true;
+      } else {
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            currentState = {
+              ...currentState,
+              votes: { ...currentState.votes, [r.value.aiPlayer.playerId]: r.value.vote.seat },
+              voteReasons: { ...(currentState.voteReasons || {}), [r.value.aiPlayer.playerId]: r.value.vote.reason },
+            };
+          }
         }
-        const vote = await generateAIVote(currentState, aiPlayer);
-        if (!isTokenValid(token)) {
-          tokenInvalidated = true;
-          break;
-        }
-
-        setGameState((prevState) => ({
-          ...prevState,
-          votes: { ...prevState.votes, [aiPlayer.playerId]: vote.seat },
-          voteReasons: { ...(prevState.voteReasons || {}), [aiPlayer.playerId]: vote.reason },
-        }));
-        currentState = {
-          ...currentState,
-          votes: { ...currentState.votes, [aiPlayer.playerId]: vote.seat },
-          voteReasons: { ...(currentState.voteReasons || {}), [aiPlayer.playerId]: vote.reason },
-        };
       }
     } finally {
       setIsWaitingForAI(false);

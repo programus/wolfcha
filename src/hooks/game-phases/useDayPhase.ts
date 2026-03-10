@@ -127,8 +127,12 @@ export function useDayPhase(
         }
       }
     } else if (isDaySpeech && isSheriffAlive) {
-      nextSeat = getNextAliveSeat(state, state.currentSpeakerSeat ?? -1, true, direction);
       const sheriffIsStartSpeaker = state.daySpeechStartSeat === sheriffSeat;
+      // Non-start sheriff just finished speaking → next step is voting, no prefetch needed
+      if (!sheriffIsStartSpeaker && state.currentSpeakerSeat === sheriffSeat) {
+        return { nextSeat: null, nextSpeakerIsAI: false };
+      }
+      nextSeat = getNextAliveSeat(state, state.currentSpeakerSeat ?? -1, true, direction);
       if (sheriffIsStartSpeaker) {
         // When sheriff started, check if we've looped back to the first non-sheriff speaker
         const nonSheriffAliveSeats = state.players
@@ -140,12 +144,17 @@ export function useDayPhase(
           nextSeat = sheriffSeat;
         }
       } else {
-        if (nextSeat === null && state.currentSpeakerSeat !== sheriffSeat) {
+        // Normal case: redirect to sheriff when about to loop back to start seat
+        if (nextSeat !== null && nextSeat === state.daySpeechStartSeat && state.currentSpeakerSeat !== sheriffSeat) {
           nextSeat = sheriffSeat;
         }
       }
     } else {
       nextSeat = getNextAliveSeat(state, state.currentSpeakerSeat ?? -1, false, direction);
+      // If nextSeat loops back to the start seat, all players have spoken → voting is next
+      if (isDaySpeech && nextSeat !== null && nextSeat === state.daySpeechStartSeat) {
+        return { nextSeat: null, nextSpeakerIsAI: false };
+      }
     }
 
     if (nextSeat !== null) {

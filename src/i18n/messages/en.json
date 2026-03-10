@@ -687,7 +687,8 @@
     "totalVotes": "Total {count}",
     "waiting": "Waiting for votes...",
     "waitingLabel": "Waiting:",
-    "youSuffix": " (you)"
+    "youSuffix": " (you)",
+    "yourVote": "Your vote: Seat {seat} {name}"
   },
   "persona": {
     "strategy": {
