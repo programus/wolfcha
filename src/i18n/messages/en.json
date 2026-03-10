@@ -2349,6 +2349,15 @@
     },
     "toast": {
       "saved": "Model settings saved"
+    },
+    "systemOnly": "System AI only",
+    "systemAI": {
+      "title": "System AI",
+      "hint": "Used for character generation, daily summaries, and game review",
+      "auto": "Auto",
+      "generator": "Generator",
+      "summary": "Summary",
+      "review": "Review"
     }
   }
 }

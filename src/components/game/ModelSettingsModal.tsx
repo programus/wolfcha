@@ -23,9 +23,24 @@ import {
 import {
   getPlayerModelSelection,
   setPlayerModelSelection,
+  getGeneratorModelPreference,
+  getSummaryModelPreference,
+  getReviewModelPreference,
+  setGeneratorModel,
+  setSummaryModel,
+  setReviewModel,
+  getSystemOnlyModels,
+  setSystemOnlyModels,
 } from "@/lib/api-keys";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ProviderStatusResponse } from "@/app/api/provider-status/route";
-import { LockSimple, CheckCircle, WarningCircle, Robot } from "@phosphor-icons/react";
+import { LockSimple, CheckCircle, WarningCircle, Robot, Gear } from "@phosphor-icons/react";
 
 // ---------------------------------------------------------------------------
 // Provider metadata
@@ -200,21 +215,76 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
   }, [allCandidates, providerStatus]);
 
   // Current selection state (local, committed on save)
+  // `selected` = all toggled-on models (player + system-only)
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // `systemOnly` = subset of `selected` that should NOT be used for player AI
+  const [systemOnly, setSystemOnly] = useState<Set<string>>(new Set());
+
+  // System AI model preferences (empty string = auto)
+  const [sysGenerator, setSysGenerator] = useState("");
+  const [sysSummary, setSysSummary] = useState("");
+  const [sysReview, setSysReview] = useState("");
 
   // Initialize selection from storage when modal opens
   useEffect(() => {
     if (!open) return;
-    const stored = getPlayerModelSelection();
-    startTransition(() => setSelected(new Set(stored)));
+    const playerModels = getPlayerModelSelection();
+    const sysOnlyModels = getSystemOnlyModels();
+    startTransition(() => {
+      // selected = player models + system-only models
+      setSelected(new Set([...playerModels, ...sysOnlyModels]));
+      setSystemOnly(new Set(sysOnlyModels));
+      setSysGenerator(getGeneratorModelPreference());
+      setSysSummary(getSummaryModelPreference());
+      setSysReview(getReviewModelPreference());
+    });
   }, [open]);
+
+  // All currently available models (provider is configured)
+  const availableModels = useMemo(
+    () => allCandidates.filter((ref) => providerStatus?.[ref.provider] ?? false),
+    [allCandidates, providerStatus]
+  );
+
+  // Models available for system AI dropdowns: only models the user has toggled on;
+  // if nothing is selected, fall back to all available.
+  const systemAIOptions = useMemo(
+    () =>
+      selected.size === 0
+        ? availableModels
+        : availableModels.filter((ref) => selected.has(ref.model)),
+    [availableModels, selected]
+  );
 
   const toggleModel = useCallback(
     (model: string, provider: ProviderName) => {
       if (disabled) return;
-      if (!(providerStatus?.[provider] ?? false)) return; // can't toggle unavailable
+      if (!(providerStatus?.[provider] ?? false)) return;
 
       setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(model)) {
+          next.delete(model);
+          // untoggling a model also clears its system-only flag
+          setSystemOnly((so) => {
+            const s = new Set(so);
+            s.delete(model);
+            return s;
+          });
+        } else {
+          next.add(model);
+        }
+        return next;
+      });
+    },
+    [disabled, providerStatus]
+  );
+
+  const toggleSystemOnly = useCallback(
+    (model: string, e: React.MouseEvent | React.ChangeEvent) => {
+      e.stopPropagation();
+      if (disabled) return;
+      setSystemOnly((prev) => {
         const next = new Set(prev);
         if (next.has(model)) {
           next.delete(model);
@@ -224,7 +294,7 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
         return next;
       });
     },
-    [disabled, providerStatus]
+    [disabled]
   );
 
   const handleSelectAll = useCallback(() => {
@@ -241,28 +311,35 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
   const handleDeselectAll = useCallback(() => {
     if (disabled) return;
     setSelected(new Set());
+    setSystemOnly(new Set());
   }, [disabled]);
 
   const handleSave = useCallback(() => {
-    const arr = Array.from(selected);
-    setPlayerModelSelection(arr);
+    // player selection = all toggled-on models minus system-only models
+    const playerArr = Array.from(selected).filter((m) => !systemOnly.has(m));
+    setPlayerModelSelection(playerArr);
+    setSystemOnlyModels(Array.from(systemOnly));
+    setGeneratorModel(sysGenerator);
+    setSummaryModel(sysSummary);
+    setReviewModel(sysReview);
     toast.success(t("modelSettings.toast.saved"));
     onOpenChange(false);
-  }, [selected, onOpenChange, t]);
+  }, [selected, systemOnly, sysGenerator, sysSummary, sysReview, onOpenChange, t]);
 
   const configuredModelCount = useMemo(
     () => allCandidates.filter((ref) => providerStatus?.[ref.provider] ?? false).length,
     [allCandidates, providerStatus]
   );
 
-  const selectedCount = useMemo(
+  // Count of models that will be used for player AI (selected minus system-only)
+  const playerModelCount = useMemo(
     () =>
-      Array.from(selected).filter((m) =>
-        allCandidates.some(
-          (ref) => ref.model === m && (providerStatus?.[ref.provider] ?? false)
-        )
+      Array.from(selected).filter(
+        (m) =>
+          !systemOnly.has(m) &&
+          allCandidates.some((ref) => ref.model === m && (providerStatus?.[ref.provider] ?? false))
       ).length,
-    [selected, allCandidates, providerStatus]
+    [selected, systemOnly, allCandidates, providerStatus]
   );
 
   // Use static mapping to avoid dynamic translation key (required by next-intl)
@@ -331,6 +408,7 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
                   {section.models.map((ref) => {
                     const isAvailable = section.configured;
                     const isChecked = selected.has(ref.model) && isAvailable;
+                    const isSysOnly = systemOnly.has(ref.model);
                     const family = getModelFamily(ref.model);
                     const shortLabel = modelShortLabel(ref.model);
 
@@ -353,17 +431,33 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
                             {family}
                           </span>
                         </div>
-                        {!isAvailable ? (
-                          <LockSimple size={14} className="shrink-0 text-(--text-muted)" />
-                        ) : (
-                          <Switch
-                            checked={isChecked}
-                            onCheckedChange={() => toggleModel(ref.model, ref.provider)}
-                            disabled={disabled || !isAvailable}
-                            className="shrink-0"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isChecked && (
+                            <label
+                              className="flex items-center gap-1 text-[10px] text-(--text-muted) cursor-pointer select-none"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSysOnly}
+                                disabled={disabled}
+                                onChange={(e) => toggleSystemOnly(ref.model, e)}
+                                className="cursor-pointer"
+                              />
+                              {t("modelSettings.systemOnly")}
+                            </label>
+                          )}
+                          {!isAvailable ? (
+                            <LockSimple size={14} className="text-(--text-muted)" />
+                          ) : (
+                            <Switch
+                              checked={isChecked}
+                              onCheckedChange={() => toggleModel(ref.model, ref.provider)}
+                              disabled={disabled || !isAvailable}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -380,13 +474,56 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
           )}
         </div>
 
+        {/* System AI section */}
+        {!statusLoading && (
+          <div className="border-t border-(--border-color) pt-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Gear size={14} className="text-(--text-muted)" />
+              <span className="text-sm font-semibold text-(--text-primary)">
+                {t("modelSettings.systemAI.title")}
+              </span>
+              <span className="text-xs text-(--text-muted)">
+                {t("modelSettings.systemAI.hint")}
+              </span>
+            </div>
+            {([
+              { label: t("modelSettings.systemAI.generator"), value: sysGenerator, onChange: setSysGenerator },
+              { label: t("modelSettings.systemAI.summary"), value: sysSummary, onChange: setSysSummary },
+              { label: t("modelSettings.systemAI.review"), value: sysReview, onChange: setSysReview },
+            ] as const).map(({ label, value, onChange }) => (
+              <div key={label} className="flex items-center gap-3">
+                <span className="text-xs text-(--text-secondary) shrink-0 w-20">{label}</span>
+                <Select
+                  value={value || "__auto__"}
+                  onValueChange={disabled ? undefined : (v) => onChange(v === "__auto__" ? "" : v)}
+                  disabled={disabled || statusLoading}
+                >
+                  <SelectTrigger className="h-8 text-xs flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__auto__">
+                      {t("modelSettings.systemAI.auto")}
+                    </SelectItem>
+                    {systemAIOptions.map((ref) => (
+                      <SelectItem key={ref.model} value={ref.model}>
+                        {modelShortLabel(ref.model)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Footer */}
         {!statusLoading && (
           <div className="pt-3 border-t border-(--border-color) space-y-3">
             <p className="text-xs text-(--text-muted)">
               {selected.size === 0
                 ? t("modelSettings.footer.allUsed", { total: configuredModelCount })
-                : t("modelSettings.footer.selectedCount", { count: selectedCount, total: configuredModelCount })}
+                : t("modelSettings.footer.selectedCount", { count: playerModelCount, total: configuredModelCount })}
             </p>
 
             <div className="flex items-center justify-between gap-2">

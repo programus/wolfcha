@@ -13,6 +13,7 @@ const VALIDATED_ZENMUX_KEY_STORAGE = "wolfcha_validated_zenmux_key";
 const VALIDATED_DASHSCOPE_KEY_STORAGE = "wolfcha_validated_dashscope_key";
 /** Project-level player model selection (no user API key required). */
 const PLAYER_MODEL_SELECTION_STORAGE = "wolfcha_player_model_selection";
+const SYSTEM_ONLY_MODELS_STORAGE = "wolfcha_system_only_models";
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -280,6 +281,21 @@ export function setReviewModel(model: string) {
   writeStorage(REVIEW_MODEL_STORAGE, model);
 }
 
+/** Returns the raw stored generator model preference (empty string = auto/not set). */
+export function getGeneratorModelPreference(): string {
+  return readStorage(GENERATOR_MODEL_STORAGE);
+}
+
+/** Returns the raw stored summary model preference (empty string = auto/not set). */
+export function getSummaryModelPreference(): string {
+  return readStorage(SUMMARY_MODEL_STORAGE);
+}
+
+/** Returns the raw stored review model preference (empty string = auto/not set). */
+export function getReviewModelPreference(): string {
+  return readStorage(REVIEW_MODEL_STORAGE);
+}
+
 /**
  * Project-level player model selection (used when custom key is NOT enabled).
  * Stores model strings selected by the user in the Model Settings panel.
@@ -308,6 +324,29 @@ export function setPlayerModelSelection(models: string[]) {
   window.localStorage.setItem(PLAYER_MODEL_SELECTION_STORAGE, JSON.stringify(normalized));
 }
 
+export function getSystemOnlyModels(): string[] {
+  if (!canUseStorage()) return [];
+  const raw = window.localStorage.getItem(SYSTEM_ONLY_MODELS_STORAGE);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => String(item ?? "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export function setSystemOnlyModels(models: string[]) {
+  if (!canUseStorage()) return;
+  const normalized = models.map((m) => String(m ?? "").trim()).filter(Boolean);
+  if (normalized.length === 0) {
+    window.localStorage.removeItem(SYSTEM_ONLY_MODELS_STORAGE);
+    return;
+  }
+  window.localStorage.setItem(SYSTEM_ONLY_MODELS_STORAGE, JSON.stringify(normalized));
+}
+
 export function clearApiKeys() {
   if (!canUseStorage()) return;
   window.localStorage.removeItem(ZENMUX_API_KEY_STORAGE);
@@ -322,6 +361,7 @@ export function clearApiKeys() {
   window.localStorage.removeItem(VALIDATED_ZENMUX_KEY_STORAGE);
   window.localStorage.removeItem(VALIDATED_DASHSCOPE_KEY_STORAGE);
   window.localStorage.removeItem(PLAYER_MODEL_SELECTION_STORAGE);
+  window.localStorage.removeItem(SYSTEM_ONLY_MODELS_STORAGE);
 }
 
 export interface KeyValidationResult {

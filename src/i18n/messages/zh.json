@@ -2349,6 +2349,15 @@
     },
     "toast": {
       "saved": "模型设置已保存"
+    },
+    "systemOnly": "仅用于系统 AI",
+    "systemAI": {
+      "title": "系统 AI",
+      "hint": "用于角色生成、日结摘要、复盘分析",
+      "auto": "自动",
+      "generator": "角色生成",
+      "summary": "日结摘要",
+      "review": "复盘分析"
     }
   }
 }
