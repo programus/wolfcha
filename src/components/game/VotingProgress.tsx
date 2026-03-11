@@ -84,107 +84,37 @@ export function VotingProgress({ gameState, humanPlayer }: VotingProgressProps) 
 
       {/* 投票详情 */}
       <div className="wc-voting-progress-list space-y-2 relative">
-        {isBadgeElection ? (
-          // 警长选举：显示完整投票明细
-          <AnimatePresence mode="popLayout" initial={false}>
-            {sortedTargets.length > 0 ? (
-              sortedTargets.map(([targetSeat, { voters, target, voteCount }]) => (
-                <motion.div
-                  layout
-                  key={targetSeat}
-                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="wc-voting-progress-row flex flex-col gap-2 p-2 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-[80px]">
-                      <span className="text-sm font-bold text-[var(--color-danger)]">
-                        {t("voteResult.seatLabel", { seat: Number(targetSeat) + 1 })}
-                      </span>
-                      <span className="text-xs text-[var(--text-secondary)] truncate max-w-[80px]">
-                        {target?.displayName}
-                      </span>
-                    </div>
-                    <motion.span
-                      layout
-                      className="text-xs font-semibold text-[var(--color-accent)] whitespace-nowrap"
-                    >
-                      {t("votingProgress.totalVotes", {
-                        count: voteCount % 1 === 0 ? voteCount : voteCount.toFixed(1),
-                      })}
-                    </motion.span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <AnimatePresence mode="popLayout">
-                      {voters.map((voter) => (
-                        <motion.span
-                          layout
-                          key={voter.playerId}
-                          initial={{ scale: 0, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          exit={{ scale: 0, opacity: 0 }}
-                          className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded ${
-                            voter.isHuman
-                              ? "bg-[var(--color-accent)] text-white font-bold"
-                              : "bg-white border border-[var(--border-color)] text-[var(--text-secondary)]"
-                          }`}
-                        >
-                          <CheckCircle size={10} weight="fill" />
-                          {t("voteResult.seatLabel", { seat: voter.seat + 1 })}
-                        </motion.span>
-                      ))}
-                    </AnimatePresence>
-                  </div>
-                </motion.div>
-              ))
-            ) : (
+        {/* 投票中：隐藏AI投票明细，只显示玩家自己的选择（警长选举和放逐投票均如此） */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          {humanPlayer && votes[humanPlayer.playerId] !== undefined ? (() => {
+            const targetSeat = votes[humanPlayer.playerId];
+            const target = gameState.players.find(p => p.seat === targetSeat);
+            return (
               <motion.div
-                key="waiting"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center justify-center gap-2 py-3 text-sm text-[var(--text-muted)]"
+                key="human-vote"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-accent-bg)] rounded-lg border border-[var(--color-accent)] border-opacity-40"
               >
-                <HourglassSimple size={16} className="animate-pulse" />
-                {t("votingProgress.waiting")}
+                <CheckCircle size={14} weight="fill" className="text-[var(--color-accent)] shrink-0" />
+                <span className="text-xs font-semibold text-[var(--color-accent)]">
+                  {t("votingProgress.yourVote", { seat: targetSeat + 1, name: target?.displayName ?? "" })}
+                </span>
               </motion.div>
-            )}
-          </AnimatePresence>
-        ) : (
-          // 放逐投票：隐藏AI投票明细，只显示人类自己的选择
-          <AnimatePresence mode="popLayout" initial={false}>
-            {humanPlayer && votes[humanPlayer.playerId] !== undefined ? (() => {
-              const targetSeat = votes[humanPlayer.playerId];
-              const target = gameState.players.find(p => p.seat === targetSeat);
-              return (
-                <motion.div
-                  key="human-vote"
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 px-2 py-1.5 bg-[var(--color-accent-bg)] rounded-lg border border-[var(--color-accent)] border-opacity-40"
-                >
-                  <CheckCircle size={14} weight="fill" className="text-[var(--color-accent)] shrink-0" />
-                  <span className="text-xs font-semibold text-[var(--color-accent)]">
-                    {t("votingProgress.yourVote", { seat: targetSeat + 1, name: target?.displayName ?? "" })}
-                  </span>
-                </motion.div>
-              );
-            })() : (
-              <motion.div
-                key="waiting"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center justify-center gap-2 py-3 text-sm text-[var(--text-muted)]"
-              >
-                <HourglassSimple size={16} className="animate-pulse" />
-                {t("votingProgress.waiting")}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        )}
+            );
+          })() : (
+            <motion.div
+              key="waiting"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center justify-center gap-2 py-3 text-sm text-[var(--text-muted)]"
+            >
+              <HourglassSimple size={16} className="animate-pulse" />
+              {t("votingProgress.waiting")}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* 未投票玩家 */}

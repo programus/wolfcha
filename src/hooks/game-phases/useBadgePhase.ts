@@ -529,33 +529,56 @@ export function useBadgePhase(
     }
     setGameState(currentState);
     const aiPlayers = currentState.players.filter((p) => p.alive && !p.isHuman && !candidates.includes(p.seat));
+    setIsWaitingForAI(true);
     try {
-      for (const aiPlayer of aiPlayers) {
-        setIsWaitingForAI(true);
-        let targetSeat: number;
-        try {
-          targetSeat = await generateAIBadgeVote(currentState, aiPlayer);
-        } catch (e) {
-          console.warn("[wolfcha] AI badge vote threw, treating as abstain", e);
-          targetSeat = BADGE_VOTE_ABSTAIN;
+      // All AI players vote in parallel — votes are intentionally hidden from prompts so
+      // each player can safely use the same snapshot state for independent decisions.
+      const snapshotState = currentState;
+      const results = await Promise.allSettled(
+        aiPlayers.map(async (aiPlayer) => {
+          let targetSeat: number;
+          try {
+            targetSeat = await generateAIBadgeVote(snapshotState, aiPlayer);
+          } catch (e) {
+            console.warn("[wolfcha] AI badge vote threw, treating as abstain", e);
+            targetSeat = BADGE_VOTE_ABSTAIN;
+          }
+          // Abstain (-1) is recorded as-is; only correct non-abstain to a valid candidate
+          if (targetSeat !== BADGE_VOTE_ABSTAIN && candidates.length > 0 && !candidates.includes(targetSeat)) {
+            targetSeat = candidates[Math.floor(Math.random() * candidates.length)];
+          }
+          // Update voted count in UI as each response arrives (breakdown is hidden by VotingProgress)
+          setGameState((prevState) => ({
+            ...prevState,
+            badge: {
+              ...prevState.badge,
+              votes: { ...prevState.badge.votes, [aiPlayer.playerId]: targetSeat },
+            },
+          }));
+          return { aiPlayer, targetSeat };
+        })
+      );
+      // Merge all results into currentState
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          currentState = {
+            ...currentState,
+            badge: {
+              ...currentState.badge,
+              votes: { ...currentState.badge.votes, [r.value.aiPlayer.playerId]: r.value.targetSeat },
+            },
+          };
         }
-
-        // Abstain (-1) is recorded as-is; only correct non-abstain to a valid candidate
-        if (targetSeat !== BADGE_VOTE_ABSTAIN && candidates.length > 0 && !candidates.includes(targetSeat)) {
-          targetSeat = candidates[Math.floor(Math.random() * candidates.length)];
-        }
-
-        // 从最新状态获取投票，避免覆盖人类玩家的投票
-        const latestState = gameStateRef.current;
-        currentState = {
-          ...currentState,
-          badge: {
-            ...currentState.badge,
-            votes: { ...latestState.badge.votes, [aiPlayer.playerId]: targetSeat },
-          },
-        };
-        setGameState(currentState);
       }
+      // Merge latest human vote (in case it arrived during parallel AI requests)
+      const latestBadgeVotes = gameStateRef.current.badge.votes;
+      currentState = {
+        ...currentState,
+        badge: {
+          ...currentState.badge,
+          votes: { ...currentState.badge.votes, ...latestBadgeVotes },
+        },
+      };
     } finally {
       setIsWaitingForAI(false);
     }
