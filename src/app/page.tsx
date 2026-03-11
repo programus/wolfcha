@@ -1719,6 +1719,7 @@ export default function Home() {
         humanPlayer={humanPlayer}
         isGenshinMode={gameState?.isGenshinMode ?? isGenshinMode}
         isSpectatorMode={gameState?.isSpectatorMode ?? false}
+        isGameOver={gameState?.phase === "GAME_END"}
       />
 
       <SettingsModal

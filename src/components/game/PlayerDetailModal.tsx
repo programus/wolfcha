@@ -25,6 +25,7 @@ interface PlayerDetailModalProps {
   humanPlayer?: Player | null;
   isGenshinMode?: boolean;
   isSpectatorMode?: boolean;
+  isGameOver?: boolean;
 }
 
 const getPlayerAvatarUrl = (player: Player, isGenshinMode: boolean) =>
@@ -47,7 +48,7 @@ const getRoleIcon = (role: string, size: number = 20) => {
 
 // getRoleName is defined inside the component to use i18n translations
 
-export function PlayerDetailModal({ player, isOpen, onClose, humanPlayer, isGenshinMode = false, isSpectatorMode = false }: PlayerDetailModalProps) {
+export function PlayerDetailModal({ player, isOpen, onClose, humanPlayer, isGenshinMode = false, isSpectatorMode = false, isGameOver = false }: PlayerDetailModalProps) {
   const t = useTranslations();
   const [renderPlayer, setRenderPlayer] = useState<Player | null>(player);
 
@@ -62,7 +63,7 @@ export function PlayerDetailModal({ player, isOpen, onClose, humanPlayer, isGens
   const isMe = !!renderPlayer?.isHuman;
   const showPersona = !!persona && !isGenshinMode;
   const isWolfTeammate = humanPlayer && isWolfRole(humanPlayer.role) && renderPlayer && isWolfRole(renderPlayer.role) && !renderPlayer.isHuman;
-  const canSeeRole = isMe || !!isWolfTeammate || !renderPlayer?.alive || isSpectatorMode;
+  const canSeeRole = isMe || !!isWolfTeammate || isSpectatorMode || isGameOver;
   const isIdentityReady = isMe ? !!renderPlayer?.displayName?.trim() : !!persona;
   const avatarSrc = renderPlayer ? getPlayerAvatarUrl(renderPlayer, isGenshinMode) : "";
   const voiceRules = useMemo(() => {
