@@ -126,6 +126,10 @@ export function useDayPhase(
           break;
         }
       }
+      // If nextSeat loops back to the start, badge speech round is complete → no prefetch
+      if (nextSeat !== null && nextSeat === state.daySpeechStartSeat) {
+        return { nextSeat: null, nextSpeakerIsAI: false };
+      }
     } else if (isDaySpeech && isSheriffAlive) {
       const sheriffIsStartSpeaker = state.daySpeechStartSeat === sheriffSeat;
       // Non-start sheriff just finished speaking → next step is voting, no prefetch needed
@@ -280,6 +284,16 @@ export function useDayPhase(
         // ignore tts prefetch errors
       }
 
+      // 链式预取：B 的内容已确定，立即为 C 发起预取，无需等待 B 显示结束
+      const postSpeechStateA = buildPostSpeechState(state, player, prefetchedSegments);
+      const { nextSeat: nextSeatA, nextSpeakerIsAI: nextIsAIA } = resolveNextSpeaker(postSpeechStateA);
+      if (nextSeatA !== null && nextIsAIA) {
+        const nextPlayerA = postSpeechStateA.players.find((p) => p.seat === nextSeatA);
+        if (nextPlayerA && !nextPlayerA.isHuman && nextPlayerA.alive) {
+          void prefetchNextAISpeech(postSpeechStateA, nextPlayerA);
+        }
+      }
+
       currentSpeakingPlayerRef.current = null;
       return;
     }
@@ -316,6 +330,16 @@ export function useDayPhase(
           }
         } catch {
           // ignore tts prefetch errors
+        }
+
+        // 链式预取：B 的内容已确定，立即为 C 发起预取
+        const postSpeechStateB = buildPostSpeechState(state, player, waitedSegments);
+        const { nextSeat: nextSeatB, nextSpeakerIsAI: nextIsAIB } = resolveNextSpeaker(postSpeechStateB);
+        if (nextSeatB !== null && nextIsAIB) {
+          const nextPlayerB = postSpeechStateB.players.find((p) => p.seat === nextSeatB);
+          if (nextPlayerB && !nextPlayerB.isHuman && nextPlayerB.alive) {
+            void prefetchNextAISpeech(postSpeechStateB, nextPlayerB);
+          }
         }
 
         currentSpeakingPlayerRef.current = null;

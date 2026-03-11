@@ -237,6 +237,10 @@ export function useDialogueManager() {
 
   /** 设置预加载发言缓存 */
   const setPrefetchedSpeech = useCallback((prefetch: PrefetchedSpeech | null) => {
+    // Reject stale callbacks: if a newer prefetch is already stored, discard this update
+    if (prefetch !== null && prefetchedSpeechRef.current !== null && prefetch.createdAt < prefetchedSpeechRef.current.createdAt) {
+      return;
+    }
     prefetchedSpeechRef.current = prefetch;
     if (prefetch === null) {
       // 出错或清除时，以空数组 resolve，解除所有等待者
