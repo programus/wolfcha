@@ -168,7 +168,9 @@ export class BadgePhase extends GamePhase {
     const roleHints =
       isWolfRole(player.role)
         ? t("prompts.badge.transfer.roleHintWerewolf")
-        : t("prompts.badge.transfer.roleHintGood");
+        : player.role === "Seer"
+          ? t("prompts.badge.transfer.roleHintSeer")
+          : t("prompts.badge.transfer.roleHintGood");
 
     const cacheableContent = t("prompts.badge.transfer.base", {
       seat: player.seat + 1,
