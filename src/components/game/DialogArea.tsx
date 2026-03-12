@@ -18,6 +18,7 @@ import LoadingMiniGame from "./MiniGame/LoadingMiniGame";
 import type { GameState, Player, ChatMessage, Phase } from "@/types/game";
 import { isWolfRole } from "@/types/game";
 import { cn } from "@/lib/utils";
+import { GAME_CONFIG } from "@/lib/game-constants";
 import { audioManager, makeAudioTaskId } from "@/lib/audio-manager";
 import { resolveVoiceId, type AppLocale } from "@/lib/voice-constants";
 import { getLocale } from "@/i18n/locale-store";
@@ -1626,6 +1627,24 @@ export function DialogArea({
                       players={gameState.players.filter((p) => p.alive)}
                     />
                     
+                    {/* 字数计数器 - 在输入框内部左下角 */}
+                    {(() => {
+                      const maxChars = GAME_CONFIG.HUMAN_SPEECH_MAX_CHARS;
+                      const usedChars = gameState.messages
+                        .filter(m => m.playerId === humanPlayer?.playerId && m.phase === gameState.phase && !m.isSystem)
+                        .reduce((sum, m) => sum + m.content.length, 0);
+                      const totalChars = usedChars + (inputText?.length ?? 0);
+                      const isOverLimit = totalChars > maxChars;
+                      const isWarning = totalChars > maxChars * 0.8;
+                      return (
+                        <div className={`absolute bottom-3 left-3 text-[11px] tabular-nums select-none ${
+                          isOverLimit ? 'text-red-400 font-semibold' : isWarning ? 'text-yellow-500' : 'text-[var(--text-muted)]'
+                        }`}>
+                          {totalChars}/{maxChars}
+                        </div>
+                      );
+                    })()}
+
                     {/* 底部按钮栏 - 在输入框内部右下角 */}
                     <div className="absolute bottom-3 right-3 flex items-center gap-2">
                       <VoiceRecorder

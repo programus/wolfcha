@@ -329,7 +329,7 @@ export const checkNeedsMidDaySummary = (state: GameState, threshold: number = 60
 
 export const buildTodayTranscript = (
   state: GameState,
-  maxChars: number,
+  maxChars = Infinity,
   options?: { includeDeadSpeech?: boolean }
 ): string => {
   const { t } = getI18n();

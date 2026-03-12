@@ -38,7 +38,7 @@ import {
 import { buildGenshinModelRefs, generateCharacters, generateGenshinModeCharacters, sampleModelRefs, type GeneratedCharacter } from "@/lib/character-generator";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
 import { getRandomScenario } from "@/lib/scenarios";
-import { DELAY_CONFIG, getRoleName } from "@/lib/game-constants";
+import { DELAY_CONFIG, GAME_CONFIG, getRoleName } from "@/lib/game-constants";
 import { generateUUID } from "@/lib/utils";
 import {
   AsyncFlowController,
@@ -1686,6 +1686,15 @@ export function useGameLogic() {
     if (!isMyTurn) return;
 
     const speech = inputText.trim();
+
+    // Enforce per-turn character limit (遗言阶段不限制)
+    if (s.phase !== "DAY_LAST_WORDS") {
+      const usedChars = s.messages
+        .filter(m => m.playerId === humanPlayer.playerId && m.phase === s.phase && !m.isSystem)
+        .reduce((sum, m) => sum + m.content.length, 0);
+      if (usedChars + speech.length > GAME_CONFIG.HUMAN_SPEECH_MAX_CHARS) return;
+    }
+
     setInputText("");
 
     const currentState = addPlayerMessage(gameStateRef.current, humanPlayer.playerId, speech);

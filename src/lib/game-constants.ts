@@ -13,6 +13,11 @@ export const GAME_CONFIG = {
   MAX_REVOTE_COUNT: 3,
   /** 警长竞选最大重投次数 */
   MAX_BADGE_REVOTE_COUNT: 2,
+  /**
+   * 人类玩家单次发言回合内所有消息的总字符数上限（跨消息气泡累加）。
+   * AI 发言 prompt 里也会写入相同数字作为长度约束。
+   */
+  HUMAN_SPEECH_MAX_CHARS: 800,
 } as const;
 
 /** 延迟时间配置（毫秒） */

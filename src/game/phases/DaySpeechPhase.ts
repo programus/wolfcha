@@ -6,7 +6,6 @@ import {
   buildGameContext,
   buildDifficultySpeechHint,
   buildPersonaSection,
-  buildPlayerTodaySpeech,
   buildTodayTranscript,
   getRoleText,
   getWinCondition,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/game-master";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
 import { getI18n } from "@/i18n/translator";
-import { DELAY_CONFIG } from "@/lib/game-constants";
+import { DELAY_CONFIG, GAME_CONFIG } from "@/lib/game-constants";
 import { delay } from "@/lib/game-flow-controller";
 import { playNarrator } from "@/lib/narrator-audio-player";
 import { getPlayerDiedKey } from "@/lib/narrator-voice";
@@ -81,8 +80,7 @@ export class DaySpeechPhase extends GamePhase {
     const difficultyHint = buildDifficultySpeechHint(state.difficulty);
     const totalSeats = state.players.length;
 
-    const todayTranscript = buildTodayTranscript(state, 2000);
-    const selfSpeech = buildPlayerTodaySpeech(state, player, 1400);
+    const todayTranscript = buildTodayTranscript(state);
 
     const todaySpeakers = new Set<string>();
     const dayStartIndex = getDayStartIndex(state);
@@ -203,8 +201,8 @@ export class DaySpeechPhase extends GamePhase {
     const taskSection = t("prompts.daySpeech.task.section", { taskLine, campaignRequirements: campaignRequirements ? "\n" + campaignRequirements : "" }) + lastWordsStrategy;
     const roleHintLine = isWolfRole(player.role) ? t("prompts.daySpeech.roleHints.werewolf") : player.role === "Seer" ? t("prompts.daySpeech.roleHints.seer") : "";
     const guidelinesSection = isGenshinMode
-      ? t("prompts.daySpeech.guidelines.genshin")
-      : t("prompts.daySpeech.guidelines.default", { playerName: player.displayName, roleHintLine });
+      ? t("prompts.daySpeech.guidelines.genshin", { maxChars: GAME_CONFIG.HUMAN_SPEECH_MAX_CHARS })
+      : t("prompts.daySpeech.guidelines.default", { playerName: player.displayName, roleHintLine, maxChars: GAME_CONFIG.HUMAN_SPEECH_MAX_CHARS });
     const systemParts: SystemPromptPart[] = [
       { text: baseCacheable, cacheable: true, ttl: "1h" },
       { text: taskSection },
@@ -224,7 +222,6 @@ export class DaySpeechPhase extends GamePhase {
     const user = t("prompts.daySpeech.user", {
       gameContext,
       todayTranscript: todayTranscript || t("prompts.daySpeech.userNoTranscript", { speakOrder }),
-      selfSpeech: selfSpeech || t("prompts.daySpeech.userNoSelfSpeech"),
       phaseHintSection,
       speakOrderHint,
     });
