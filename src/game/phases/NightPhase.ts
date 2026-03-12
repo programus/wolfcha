@@ -117,7 +117,7 @@ export class NightPhase extends GamePhase {
     const speakerSystem = t("speakers.system");
     const systemMessages = getSystemMessages();
     const uiText = getUiText();
-    const guard = state.players.find((p) => p.role === "Guard" && p.alive);
+    const guard = state.players.find((p) => p.role === "Guard");
 
     let currentState = this.transitionPhase(state, "NIGHT_GUARD_ACTION");
     currentState = addSystemMessage(currentState, systemMessages.guardActionStart);
@@ -127,7 +127,9 @@ export class NightPhase extends GamePhase {
     runtime.setDialogue(speakerSystem, uiText.guardActing, false);
     await playNarrator("guardWake");
 
-    if (!guard) {
+    if (!guard || !guard.alive) {
+      // Guard doesn't exist in this game, or has already died — fake a delay so other
+      // players can't infer the guard's status from the absence of a waiting period.
       await delay(randomFakeActionDelay());
       await runtime.waitForUnpause();
       if (!runtime.isTokenValid(runtime.token)) return currentState;
@@ -171,6 +173,7 @@ export class NightPhase extends GamePhase {
     const wolves = currentState.players.filter((p) => isWolfRole(p.role) && p.alive);
 
     if (wolves.length === 0) {
+      // No alive wolves — fake a delay so players can't tell the wolf team is gone.
       runtime.setIsWaitingForAI(true);
       runtime.setDialogue(speakerSystem, uiText.wolfActing, false);
       await playNarrator("wolfWake");
@@ -203,6 +206,13 @@ export class NightPhase extends GamePhase {
       try {
         // 简化逻辑：第一个狼人决定目标，其他狼人自动达成共识
         const firstWolf = wolves[0];
+        // Defensive: firstWolf is guaranteed alive by the filter above, but guard
+        // explicitly to prevent calling the API for a dead AI player.
+        if (!firstWolf.alive) {
+          runtime.setIsWaitingForAI(false);
+          await playNarrator("wolfClose");
+          return currentState;
+        }
         const targetSeat = await generateWolfAction(currentState, firstWolf, {});
         
         await runtime.waitForUnpause();
@@ -244,8 +254,8 @@ export class NightPhase extends GamePhase {
     const speakerSystem = t("speakers.system");
     const systemMessages = getSystemMessages();
     const uiText = getUiText();
-    const witch = state.players.find((p) => p.role === "Witch" && p.alive);
-    const canWitchAct = witch && (!state.roleAbilities.witchHealUsed || !state.roleAbilities.witchPoisonUsed);
+    const witch = state.players.find((p) => p.role === "Witch");
+    const canWitchAct = witch && witch.alive && (!state.roleAbilities.witchHealUsed || !state.roleAbilities.witchPoisonUsed);
     let currentState = this.transitionPhase(state, "NIGHT_WITCH_ACTION");
     currentState = addSystemMessage(currentState, systemMessages.witchActionStart);
     runtime.setGameState(currentState);
@@ -254,7 +264,9 @@ export class NightPhase extends GamePhase {
     runtime.setDialogue(speakerSystem, uiText.witchActing, false);
     await playNarrator("witchWake");
 
-    if (!witch || !canWitchAct) {
+    if (!witch || !witch.alive || !canWitchAct) {
+      // Witch doesn't exist, has already died, or has used all her potions —
+      // fake a delay so other players can't infer her status.
       await delay(randomFakeActionDelay());
       await runtime.waitForUnpause();
       if (!runtime.isTokenValid(runtime.token)) return currentState;
@@ -300,7 +312,7 @@ export class NightPhase extends GamePhase {
     const speakerSystem = t("speakers.system");
     const systemMessages = getSystemMessages();
     const uiText = getUiText();
-    const seer = state.players.find((p) => p.role === "Seer" && p.alive);
+    const seer = state.players.find((p) => p.role === "Seer");
     let currentState = this.transitionPhase(state, "NIGHT_SEER_ACTION");
     currentState = addSystemMessage(currentState, systemMessages.seerActionStart);
     runtime.setGameState(currentState);
@@ -309,7 +321,9 @@ export class NightPhase extends GamePhase {
     runtime.setDialogue(speakerSystem, uiText.seerChecking, false);
     await playNarrator("seerWake");
 
-    if (!seer) {
+    if (!seer || !seer.alive) {
+      // Seer doesn't exist in this game, or has already died — fake a delay so
+      // other players can't infer the seer's status from timing.
       await delay(randomFakeActionDelay());
       await runtime.waitForUnpause();
       if (!runtime.isTokenValid(runtime.token)) return currentState;
