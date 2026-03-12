@@ -984,7 +984,7 @@
       "speakOrder": {
         "first": "You speak first. No one has spoken yet.",
         "last": "You are the last speaker ({speakOrder}/{totalSpeakers}). Everyone has spoken. Don't say things like \"let's see what Seat X says\".",
-        "middle": "You are speaker {speakOrder}/{totalSpeakers}. Already spoken: {spokenList}. Yet to speak: {unspokenList}.",
+        "middle": "You are speaker {speakOrder}/{totalSpeakers}. Already spoken: {spokenList}. Yet to speak: {unspokenList}. Note: players who have already spoken will NOT speak again—do not question them or ask for clarification; only analyze their statements.",
         "skipped": "{seat}(skipped)"
       },
       "campaign": {
@@ -1006,8 +1006,8 @@
         "section": "【Task】\n{taskLine}{campaignRequirements}"
       },
       "guidelines": {
-        "genshin": "【Speaking rules】\n1. Base judgments on current state and rules. Don't invent personas or catchphrases.\n2. Keep it concise and explain your intent for this round.\n3. Keep it around 4-6 sentences total; 1-2 sentences per bubble; total speech must not exceed {maxChars} characters.\n4. Only discuss living players; avoid postmortems.\n5. Timeline constraint: last night's kill is locked before today's daytime speeches. Do NOT treat today's campaign/claims/speeches as the direct cause of last night's kill.\n\n【Output format】\nReturn a JSON string array, each element a message bubble. Start your response directly with [, no text before or after the array.",
-        "default": "【Core principles】\n1. **In-game focus**: Speech must be based on actual game info. NEVER fabricate events.\n2. **Only living players**: Only discuss current living players.\n\n【Speaking guide】\n- NEVER fabricate speeches! First speaker must not reference \"earlier\" speeches.\n- NEVER use ANY job-related expressions! No analogies (like selling insurance), jargon (from my report), or experiences (when I was a salesman). Use only Werewolf game terms.\n- Timeline constraint: last night's kill is locked before today's daytime speeches. Do NOT treat today's campaign/claims/speeches as the direct cause of last night's kill.\n- 4-6 sentences, 1-2 per bubble, split into 2-5 bubbles; total speech must not exceed {maxChars} characters.\n- Use \"Seat X\" for players. No stage directions (e.g., *pushes glasses*).\n{roleHintLine}\n\n【Output format】\nReturn a JSON string array. Start your response directly with [, no text before or after the array."
+        "genshin": "【Speaking rules】\n1. Base judgments on current state and rules. Don't invent personas or catchphrases.\n2. Keep it concise and explain your intent for this round.\n3. Keep it around 4-6 sentences total; 1-2 sentences per bubble; total speech must not exceed {maxChars} characters.\n4. Only discuss living players; avoid postmortems.\n5. Timeline constraint: last night's kill is locked before today's daytime speeches. Do NOT treat today's campaign/claims/speeches as the direct cause of last night's kill.\n6. **Never ask already-spoken players questions**: each player speaks only once per day and cannot respond. Analyze their statements rather than directing questions at them.\n\n【Output format】\nReturn a JSON string array, each element a message bubble. Start your response directly with [, no text before or after the array.",
+        "default": "【Core principles】\n1. **In-game focus**: Speech must be based on actual game info. NEVER fabricate events.\n2. **Only living players**: Only discuss current living players.\n\n【Speaking guide】\n- NEVER fabricate speeches! First speaker must not reference \"earlier\" speeches.\n- NEVER use ANY job-related expressions! No analogies (like selling insurance), jargon (from my report), or experiences (when I was a salesman). Use only Werewolf game terms.\n- Timeline constraint: last night's kill is locked before today's daytime speeches. Do NOT treat today's campaign/claims/speeches as the direct cause of last night's kill.\n- **Never ask already-spoken players questions**: each player speaks only once per day, so they cannot respond. You may analyze or challenge their statements, but do NOT use phrases like \"Seat X, can you explain…\" or \"Seat X, what do you say to that?\"\n- 4-6 sentences, 1-2 per bubble, split into 2-5 bubbles; total speech must not exceed {maxChars} characters.\n- Use \"Seat X\" for players. No stage directions (e.g., *pushes glasses*).\n{roleHintLine}\n\n【Output format】\nReturn a JSON string array. Start your response directly with [, no text before or after the array."
       },
       "phaseHint": {
         "badge": "You are delivering a sheriff campaign speech. Follow campaign requirements strictly.",
@@ -1712,6 +1712,9 @@
       },
       "todayDeaths": "【Deaths today】\n{lines}",
       "voteHistoryHeader": "Execution vote details per day (who voted for whom):",
+      "badgeVoteHistoryHeader": "Sheriff election vote details (who voted for whom):",
+      "badgeTorn": "Vote tied — the badge was torn. No sheriff this game.",
+      "badgeAutoElected": "Seat {seat} {name} was the only candidate and was automatically elected sheriff.",
       "voteDayHeader": "Day {day} votes:",
       "voteGroup": "Seat {seat} {name} ({count} votes): {voters}",
       "seatName": "Seat {seat} {name}",

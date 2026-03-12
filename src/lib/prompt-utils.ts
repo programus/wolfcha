@@ -1,4 +1,4 @@
-import type { DifficultyLevel, GameState, Player, DailySummaryVoteData } from "@/types/game";
+import type { DifficultyLevel, GameState, Player } from "@/types/game";
 import { isWolfRole } from "@/types/game";
 import type { SystemPromptPart } from "@/game/core/types";
 import type { LLMMessage } from "./llm";
@@ -214,32 +214,6 @@ export const buildAliveCountsSection = (state: GameState): string => {
   return t("promptUtils.aliveCounts", { count: alive.length });
 };
 
-/** Format structured vote_data into readable text for <history>. Only sheriff election.
- * Execution vote details are in <vote_history> block instead.
- * Seat numbers in vote_data are 0-based. */
-function formatVoteDataForHistory(v: DailySummaryVoteData): string {
-  const { t } = getI18n();
-  const separator = t("promptUtils.gameContext.listSeparator");
-  const parts: string[] = [];
-  const fmt = (votes: Record<string, number[]>) =>
-    Object.entries(votes)
-      .map(([target, arr]) => {
-        const voters = (arr as number[]).map((s) => t("promptUtils.gameContext.seatLabel", { seat: s + 1 })).join(separator);
-        const targetNum = Number.parseInt(target, 10);
-        return t("promptUtils.gameContext.votersVotedFor", { voters, target: Number.isFinite(targetNum) ? targetNum + 1 : target });
-      })
-      .filter(Boolean)
-      .join(t("promptUtils.gameContext.semicolon"));
-  if (v.sheriff_election) {
-    const { winner, votes } = v.sheriff_election;
-    const base = t("promptUtils.gameContext.sheriffVote", { seat: winner + 1 });
-    const detail = fmt(votes);
-    parts.push(detail ? `${base}${t("promptUtils.gameContext.semicolon")}${detail}` : base);
-  }
-  // execution_vote is intentionally omitted here — see <vote_history> block in gameContext.
-  return parts.join(" ");
-}
-
 export const buildDailySummariesSection = (state: GameState): string => {
   const { t } = getI18n();
   // Get summaries from dailySummaries (new format: single paragraph text)
@@ -260,13 +234,8 @@ export const buildDailySummariesSection = (state: GameState): string => {
     if (summaryTexts.length === 0) continue;
 
     const fullSummary = summaryTexts.join(separator);
-    
-    // Append structured vote_data so "who voted for whom" is never lost
-    const voteData = state.dailySummaryVoteData?.[day];
-    const voteText = voteData ? formatVoteDataForHistory(voteData) : "";
     const dayLabel = t("promptUtils.gameContext.dayLabel", { day });
-    const line = voteText ? `${dayLabel}${fullSummary} ${voteText}` : `${dayLabel}${fullSummary}`;
-    lines.push(line);
+    lines.push(`${dayLabel}${fullSummary}`);
   }
 
   if (lines.length === 0) return "";
@@ -775,9 +744,45 @@ alive_count: ${alivePlayers.length}
     context += `\n\n<focus_reminder>${t("promptUtils.gameContext.focusReminder")}</focus_reminder>`;
   }
 
+  const hasBadgeVoteHistory = Object.values(state.badge?.history ?? {}).some(v => Object.keys(v).length > 0);
+  // Show badge election block when election has concluded: someone won (normal or auto) or badge was torn
+  const badgeElectionHappened = state.badge?.holderSeat !== null || hasBadgeVoteHistory;
+
+  if (badgeElectionHappened) {
+    const day1Votes = state.badge.history?.[1] ?? {};
+    const hasVotes = Object.keys(day1Votes).length > 0;
+    context += `\n\n<badge_election>`;
+    context += `\n${t("promptUtils.gameContext.badgeVoteHistoryHeader")}`;
+
+    if (hasVotes) {
+      const voteGroups: Record<number, number[]> = {};
+      Object.entries(day1Votes).forEach(([voterId, targetSeat]) => {
+        const voter = state.players.find(p => p.playerId === voterId);
+        if (voter) {
+          if (!voteGroups[targetSeat]) voteGroups[targetSeat] = [];
+          voteGroups[targetSeat].push(voter.seat);
+        }
+      });
+      Object.entries(voteGroups)
+        .sort(([, a], [, b]) => b.length - a.length)
+        .forEach(([target, voters]) => {
+          const targetPlayer = state.players.find(p => p.seat === Number(target));
+          const voterList = voters.map(s => s + 1).join(',');
+          context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: Number(target) + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voters.length}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
+        });
+      if (state.badge.holderSeat === null) {
+        context += `\n${t("promptUtils.gameContext.badgeTorn")}`;
+      }
+    } else {
+      // auto-elected (only candidate)
+      const winner = state.players.find(p => p.seat === state.badge.holderSeat);
+      context += `\n${t("promptUtils.gameContext.badgeAutoElected", { seat: (state.badge.holderSeat ?? 0) + 1, name: winner?.displayName || '' })}`;
+    }
+    context += `\n</badge_election>`;
+  }
+
   if (state.voteHistory && Object.keys(state.voteHistory).length > 0) {
     // Full per-voter execution vote history for all days (no compression).
-    // Sheriff election votes are in <history> instead.
     context += `\n\n<vote_history>\n${t("promptUtils.gameContext.voteHistoryHeader")}`;
     const sheriffSeat = state.badge.holderSeat;
     const sheriffPlayer =
@@ -786,35 +791,35 @@ alive_count: ${alivePlayers.length}
 
     Object.entries(state.voteHistory)
       .sort(([a], [b]) => Number(a) - Number(b))
-      .forEach(([day, votes]) => {
-        const voteGroups: Record<number, number[]> = {};
-        Object.entries(votes).forEach(([voterId, targetSeat]) => {
-          const voter = state.players.find(p => p.playerId === voterId);
-          if (voter) {
-            if (!voteGroups[targetSeat]) voteGroups[targetSeat] = [];
-            voteGroups[targetSeat].push(voter.seat);
-          }
-        });
+        .forEach(([day, votes]) => {
+          const voteGroups: Record<number, number[]> = {};
+          Object.entries(votes).forEach(([voterId, targetSeat]) => {
+            const voter = state.players.find(p => p.playerId === voterId);
+            if (voter) {
+              if (!voteGroups[targetSeat]) voteGroups[targetSeat] = [];
+              voteGroups[targetSeat].push(voter.seat);
+            }
+          });
 
-        const sortedTargets = Object.entries(voteGroups)
-          .map(([target, voters]) => {
-            const weightedVotes = voters.reduce((sum, seat) => {
-              const voter = state.players.find((p) => p.seat === seat);
-              if (!voter) return sum;
-              return sum + (voter.playerId === sheriffPlayerId ? 1.5 : 1);
-            }, 0);
-            return { target: Number(target), voters, weightedVotes };
-          })
-          .sort((a, b) => b.weightedVotes - a.weightedVotes);
+          const sortedTargets = Object.entries(voteGroups)
+            .map(([target, voters]) => {
+              const weightedVotes = voters.reduce((sum, seat) => {
+                const voter = state.players.find((p) => p.seat === seat);
+                if (!voter) return sum;
+                return sum + (voter.playerId === sheriffPlayerId ? 1.5 : 1);
+              }, 0);
+              return { target: Number(target), voters, weightedVotes };
+            })
+            .sort((a, b) => b.weightedVotes - a.weightedVotes);
 
-        context += `\nday_${day}:`;
-        sortedTargets.forEach(({ target, voters, weightedVotes }) => {
-          const targetPlayer = state.players.find(p => p.seat === target);
-          const voteLabel = Number.isInteger(weightedVotes) ? `${weightedVotes}` : weightedVotes.toFixed(1);
-          const voterList = voters.map(s => s + 1).join(',');
-          context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: target + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voteLabel}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
+          context += `\nday_${day}:`;
+          sortedTargets.forEach(({ target, voters, weightedVotes }) => {
+            const targetPlayer = state.players.find(p => p.seat === target);
+            const voteLabel = Number.isInteger(weightedVotes) ? `${weightedVotes}` : weightedVotes.toFixed(1);
+            const voterList = voters.map(s => s + 1).join(',');
+            context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: target + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voteLabel}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
+          });
         });
-      });
     context += `\n</vote_history>`;
   }
 
