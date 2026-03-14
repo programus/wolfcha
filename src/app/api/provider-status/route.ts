@@ -5,6 +5,17 @@ export interface ProviderStatusResponse {
   providers: Record<ProviderName, boolean>;
   /** Model IDs for the openai-compatible provider (from env var or fetched via API). */
   openaiCompatibleModels: string[];
+  /**
+   * Default model selection preset from server env vars.
+   * Applied on the client only when the user has not yet saved their own preferences.
+   * Controlled via DEFAULT_PLAYER_MODELS / DEFAULT_SYSTEM_ONLY_MODELS /
+   * DEFAULT_GENERATOR_MODEL / DEFAULT_SUMMARY_MODEL / DEFAULT_REVIEW_MODEL.
+   */
+  defaultPlayerModels: string[];
+  defaultSystemOnlyModels: string[];
+  defaultGeneratorModel: string;
+  defaultSummaryModel: string;
+  defaultReviewModel: string;
 }
 
 /**
@@ -18,6 +29,10 @@ export interface ProviderStatusResponse {
  *
  * Used by the Model Settings UI to determine which models can be selected.
  */
+function parseModelList(env: string | undefined): string[] {
+  return (env ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+}
+
 export async function GET() {
   const openaiCompatibleModels = await fetchOpenAICompatibleModels();
 
@@ -33,5 +48,13 @@ export async function GET() {
       openaiCompatibleModels.length > 0,
   };
 
-  return Response.json({ providers: status, openaiCompatibleModels } satisfies ProviderStatusResponse);
+  return Response.json({
+    providers: status,
+    openaiCompatibleModels,
+    defaultPlayerModels: parseModelList(process.env.DEFAULT_PLAYER_MODELS),
+    defaultSystemOnlyModels: parseModelList(process.env.DEFAULT_SYSTEM_ONLY_MODELS),
+    defaultGeneratorModel: (process.env.DEFAULT_GENERATOR_MODEL ?? "").trim(),
+    defaultSummaryModel: (process.env.DEFAULT_SUMMARY_MODEL ?? "").trim(),
+    defaultReviewModel: (process.env.DEFAULT_REVIEW_MODEL ?? "").trim(),
+  } satisfies ProviderStatusResponse);
 }

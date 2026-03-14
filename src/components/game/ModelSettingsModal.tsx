@@ -31,6 +31,7 @@ import {
   setReviewModel,
   getSystemOnlyModels,
   setSystemOnlyModels,
+  isModelSettingsConfigured,
 } from "@/lib/api-keys";
 import {
   Select,
@@ -117,6 +118,14 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
   const [providerStatus, setProviderStatus] = useState<Record<ProviderName, boolean> | null>(null);
   /** Dynamic model IDs configured via OPENAI_COMPATIBLE_MODELS env var on the server. */
   const [dynamicCompatibleModels, setDynamicCompatibleModels] = useState<string[]>([]);
+  /** Default model settings from server env vars; null = not yet fetched. */
+  const [serverDefaults, setServerDefaults] = useState<{
+    playerModels: string[];
+    systemOnlyModels: string[];
+    generatorModel: string;
+    summaryModel: string;
+    reviewModel: string;
+  } | null>(null);
   /** Derived loading indicator: true while status hasn't resolved yet */
   const statusLoading = open && providerStatus === null;
 
@@ -130,6 +139,13 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
         if (!cancelled) {
           setProviderStatus(data.providers);
           setDynamicCompatibleModels(data.openaiCompatibleModels ?? []);
+          setServerDefaults({
+            playerModels: data.defaultPlayerModels ?? [],
+            systemOnlyModels: data.defaultSystemOnlyModels ?? [],
+            generatorModel: data.defaultGeneratorModel ?? "",
+            summaryModel: data.defaultSummaryModel ?? "",
+            reviewModel: data.defaultReviewModel ?? "",
+          });
         }
       })
       .catch(() => {
@@ -143,6 +159,7 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
             "openai-compatible": false,
           });
           setDynamicCompatibleModels([]);
+          setServerDefaults({ playerModels: [], systemOnlyModels: [], generatorModel: "", summaryModel: "", reviewModel: "" });
         }
       });
 
@@ -225,9 +242,10 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
   const [sysSummary, setSysSummary] = useState("");
   const [sysReview, setSysReview] = useState("");
 
-  // Initialize selection from storage when modal opens
+  // Initialize selection from storage when modal opens (only when user has already saved settings)
   useEffect(() => {
     if (!open) return;
+    if (!isModelSettingsConfigured()) return; // not yet saved — wait for server defaults below
     const playerModels = getPlayerModelSelection();
     const sysOnlyModels = getSystemOnlyModels();
     startTransition(() => {
@@ -239,6 +257,19 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
       setSysReview(getReviewModelPreference());
     });
   }, [open]);
+
+  // Apply server defaults when the user has never saved their own settings
+  useEffect(() => {
+    if (!open || serverDefaults === null) return;
+    if (isModelSettingsConfigured()) return; // user has saved — localStorage takes precedence
+    startTransition(() => {
+      setSelected(new Set([...serverDefaults.playerModels, ...serverDefaults.systemOnlyModels]));
+      setSystemOnly(new Set(serverDefaults.systemOnlyModels));
+      setSysGenerator(serverDefaults.generatorModel);
+      setSysSummary(serverDefaults.summaryModel);
+      setSysReview(serverDefaults.reviewModel);
+    });
+  }, [open, serverDefaults]);
 
   // All currently available models (provider is configured)
   const availableModels = useMemo(
@@ -313,6 +344,17 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
     setSelected(new Set());
     setSystemOnly(new Set());
   }, [disabled]);
+
+  const handleReset = useCallback(() => {
+    if (disabled || serverDefaults === null) return;
+    startTransition(() => {
+      setSelected(new Set([...serverDefaults.playerModels, ...serverDefaults.systemOnlyModels]));
+      setSystemOnly(new Set(serverDefaults.systemOnlyModels));
+      setSysGenerator(serverDefaults.generatorModel);
+      setSysSummary(serverDefaults.summaryModel);
+      setSysReview(serverDefaults.reviewModel);
+    });
+  }, [disabled, serverDefaults]);
 
   const handleSave = useCallback(() => {
     // player selection = all toggled-on models minus system-only models
@@ -515,6 +557,17 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
                     >
                       {t("modelSettings.actions.deselectAll")}
                     </Button>
+                    {serverDefaults !== null && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7 text-(--text-muted)"
+                        onClick={handleReset}
+                      >
+                        {t("modelSettings.actions.resetDefaults")}
+                      </Button>
+                    )}
                   </>
                 )}
               </div>

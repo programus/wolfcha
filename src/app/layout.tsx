@@ -7,6 +7,7 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import { defaultLocale, localeToHtmlLang } from "@/i18n/config";
 import { getMessages } from "@/i18n/messages";
 import { JsonLd, getGameJsonLd, getWebsiteJsonLd, getOrganizationJsonLd } from "@/components/seo/JsonLd";
+import { ModelDefaultsInit } from "@/components/game/ModelDefaultsInit";
 
 const defaultMessages = getMessages(defaultLocale);
 
@@ -112,6 +113,7 @@ export default function RootLayout({
         <JsonLd data={getGameJsonLd()} />
         <JsonLd data={getOrganizationJsonLd()} />
         <I18nProvider>
+          <ModelDefaultsInit />
           <Toaster position="top-center" closeButton />
           {children}
         </I18nProvider>

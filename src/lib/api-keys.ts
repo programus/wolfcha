@@ -317,11 +317,57 @@ export function getPlayerModelSelection(): string[] {
 export function setPlayerModelSelection(models: string[]) {
   if (!canUseStorage()) return;
   const normalized = models.map((m) => String(m ?? "").trim()).filter(Boolean);
-  if (normalized.length === 0) {
-    window.localStorage.removeItem(PLAYER_MODEL_SELECTION_STORAGE);
-    return;
-  }
+  // Always write — even for an empty array — so getModelSettingsConfigured() can
+  // distinguish "user explicitly saved with no models selected" from "never saved".
   window.localStorage.setItem(PLAYER_MODEL_SELECTION_STORAGE, JSON.stringify(normalized));
+}
+
+/**
+ * Returns true if the user has ever explicitly saved their model settings.
+ * Used to decide whether server-supplied defaults should be applied.
+ */
+export function isModelSettingsConfigured(): boolean {
+  if (!canUseStorage()) return false;
+  return window.localStorage.getItem(PLAYER_MODEL_SELECTION_STORAGE) !== null;
+}
+
+/**
+ * Write server-supplied default model settings to localStorage.
+ * Marks the user as "configured" so defaults are not re-applied on next load.
+ */
+export function applyModelDefaults(defaults: {
+  playerModels: string[];
+  systemOnlyModels: string[];
+  generatorModel: string;
+  summaryModel: string;
+  reviewModel: string;
+}) {
+  if (!canUseStorage()) return;
+  const playerNorm = defaults.playerModels.map((m) => m.trim()).filter(Boolean);
+  const sysOnlyNorm = defaults.systemOnlyModels.map((m) => m.trim()).filter(Boolean);
+  // setPlayerModelSelection writes the key even for [], marking as configured
+  window.localStorage.setItem(PLAYER_MODEL_SELECTION_STORAGE, JSON.stringify(playerNorm));
+  if (sysOnlyNorm.length > 0) {
+    window.localStorage.setItem(SYSTEM_ONLY_MODELS_STORAGE, JSON.stringify(sysOnlyNorm));
+  } else {
+    window.localStorage.removeItem(SYSTEM_ONLY_MODELS_STORAGE);
+  }
+  writeStorage(GENERATOR_MODEL_STORAGE, defaults.generatorModel);
+  writeStorage(SUMMARY_MODEL_STORAGE, defaults.summaryModel);
+  writeStorage(REVIEW_MODEL_STORAGE, defaults.reviewModel);
+}
+
+/**
+ * Clear all model settings from localStorage so that server defaults will be
+ * re-applied on next load / next time ModelSettingsModal opens.
+ */
+export function resetModelSettings() {
+  if (!canUseStorage()) return;
+  window.localStorage.removeItem(PLAYER_MODEL_SELECTION_STORAGE);
+  window.localStorage.removeItem(SYSTEM_ONLY_MODELS_STORAGE);
+  window.localStorage.removeItem(GENERATOR_MODEL_STORAGE);
+  window.localStorage.removeItem(SUMMARY_MODEL_STORAGE);
+  window.localStorage.removeItem(REVIEW_MODEL_STORAGE);
 }
 
 export function getSystemOnlyModels(): string[] {
