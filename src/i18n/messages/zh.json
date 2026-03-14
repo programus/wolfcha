@@ -1225,6 +1225,12 @@
       "wolfWin": "狼人胜利"
     }
   },
+  "roleComposition": {
+    "title": "本局角色配置",
+    "wolfFaction": "狼人阵营",
+    "godFaction": "神职阵营",
+    "villagerFaction": "村民"
+  },
   "page": {
     "voteHelp": "怎么投票？",
     "tutorialTitle": "玩法说明",

@@ -1225,6 +1225,12 @@
       "wolfWin": "Werewolves win"
     }
   },
+  "roleComposition": {
+    "title": "Role Composition",
+    "wolfFaction": "Werewolf Faction",
+    "godFaction": "God Roles",
+    "villagerFaction": "Villagers"
+  },
   "page": {
     "voteHelp": "How to vote?",
     "tutorialTitle": "How to play",

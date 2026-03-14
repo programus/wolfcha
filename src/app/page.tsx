@@ -50,6 +50,7 @@ import { NightActionOverlay, type NightActionOverlayType } from "@/components/ga
 import { TutorialOverlay, type TutorialPayload } from "@/components/game/TutorialOverlay";
 import { DevConsole, DevModeButton } from "@/components/DevTools";
 import { SettingsModal } from "@/components/game/SettingsModal";
+import { RoleCompositionChip } from "@/components/game/RoleCompositionChip";
 
 import { buildSimpleAvatarUrl, getModelLogoUrl } from "@/lib/avatar-config";
 import { audioManager, makeAudioTaskId } from "@/lib/audio-manager";
@@ -1461,10 +1462,7 @@ export default function Home() {
                     <span className="text-xs uppercase tracking-wider opacity-60">Day</span>
                     <span className="font-serif text-lg font-bold">{String(gameState.day).padStart(2, '0')}</span>
                   </div>
-                  <div className="wc-topbar__item">
-                    <span className="text-xs uppercase tracking-wider opacity-60">Alive</span>
-                    <span className="font-serif text-lg font-bold">{gameState.players.filter((p) => p.alive).length}/{gameState.players.length}</span>
-                  </div>
+                  <RoleCompositionChip players={gameState.players} />
                   {gameState.badge.holderSeat !== null && (
                     <div className="wc-topbar__item">
                       <span className="text-xs uppercase tracking-wider opacity-60">{t("page.badgeLabel")}</span>
