@@ -40,7 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ProviderStatusResponse } from "@/app/api/provider-status/route";
-import { LockSimple, CheckCircle, WarningCircle, Robot, Gear } from "@phosphor-icons/react";
+import { CheckCircle, Robot, Gear } from "@phosphor-icons/react";
 
 // ---------------------------------------------------------------------------
 // Provider metadata
@@ -342,20 +342,6 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
     [selected, systemOnly, allCandidates, providerStatus]
   );
 
-  // Use static mapping to avoid dynamic translation key (required by next-intl)
-  const getConfigureHint = useCallback(
-    (provider: ProviderName): string => {
-      switch (provider) {
-        case "openai": return t("modelSettings.configureHint.openai");
-        case "google": return t("modelSettings.configureHint.google");
-        case "anthropic": return t("modelSettings.configureHint.anthropic");
-        case "openai-compatible": return t("modelSettings.configureHint.openaiCompatible");
-        default: return t("modelSettings.configureHint.default");
-      }
-    },
-    [t]
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] max-w-lg max-h-[90vh] flex flex-col">
@@ -378,25 +364,18 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
               {t("modelSettings.loading")}
             </div>
           ) : (
-            sections.map((section) => (
+            sections.filter((section) => section.configured).map((section) => (
               <div key={section.provider}>
                 {/* Provider header */}
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm font-semibold text-(--text-primary)">
                     {section.label}
                   </span>
-                  {section.configured ? (
-                    <span className="flex items-center gap-1 text-xs text-emerald-500">
-                      <CheckCircle size={13} weight="fill" />
-                      {t("modelSettings.status.available")}
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-xs text-(--text-muted)">
-                      <LockSimple size={13} weight="fill" />
-                      {t("modelSettings.status.notConfigured")}
-                    </span>
-                  )}
-                  {section.isBuiltin && section.configured && (
+                  <span className="flex items-center gap-1 text-xs text-emerald-500">
+                    <CheckCircle size={13} weight="fill" />
+                    {t("modelSettings.status.available")}
+                  </span>
+                  {section.isBuiltin && (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
                       {t("modelSettings.badge.builtin")}
                     </Badge>
@@ -406,8 +385,7 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
                 {/* Model rows */}
                 <div className="space-y-1">
                   {section.models.map((ref) => {
-                    const isAvailable = section.configured;
-                    const isChecked = selected.has(ref.model) && isAvailable;
+                    const isChecked = selected.has(ref.model);
                     const isSysOnly = systemOnly.has(ref.model);
                     const family = getModelFamily(ref.model);
                     const shortLabel = modelShortLabel(ref.model);
@@ -417,11 +395,11 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
                         key={ref.model}
                         className={[
                           "flex items-center justify-between gap-3 rounded-md px-3 py-2 transition-colors",
-                          isAvailable && !disabled
+                          !disabled
                             ? "bg-(--bg-card) hover:bg-(--bg-hover) cursor-pointer"
                             : "opacity-40 cursor-not-allowed bg-(--bg-card)/50",
                         ].join(" ")}
-                        onClick={() => isAvailable && !disabled && toggleModel(ref.model, ref.provider)}
+                        onClick={() => !disabled && toggleModel(ref.model, ref.provider)}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-xs font-mono text-(--text-secondary) truncate flex-1">
@@ -447,28 +425,17 @@ export function ModelSettingsModal({ open, onOpenChange, disabled = false }: Mod
                               {t("modelSettings.systemOnly")}
                             </label>
                           )}
-                          {!isAvailable ? (
-                            <LockSimple size={14} className="text-(--text-muted)" />
-                          ) : (
-                            <Switch
-                              checked={isChecked}
-                              onCheckedChange={() => toggleModel(ref.model, ref.provider)}
-                              disabled={disabled || !isAvailable}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          )}
+                          <Switch
+                            checked={isChecked}
+                            onCheckedChange={() => toggleModel(ref.model, ref.provider)}
+                            disabled={disabled}
+                            onClick={(e) => e.stopPropagation()}
+                          />
                         </div>
                       </div>
                     );
                   })}
                 </div>
-
-                {!section.configured && PROVIDER_META[section.provider].requiresKey && (
-                  <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-(--text-muted)">
-                    <WarningCircle size={12} />
-                    {getConfigureHint(section.provider)}
-                  </p>
-                )}
               </div>
             ))
           )}
