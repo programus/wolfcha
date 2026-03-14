@@ -1650,6 +1650,16 @@
       "idiot": "Idiot (good team, immune to exile once, then loses voting rights)",
       "whiteWolfKing": "White Wolf King (evil team, can self-destruct during day to take one player)"
     },
+    "roleShortName": {
+      "werewolf": "Werewolf",
+      "whiteWolfKing": "White Wolf King",
+      "seer": "Seer",
+      "witch": "Witch",
+      "hunter": "Hunter",
+      "guard": "Guard",
+      "idiot": "Idiot",
+      "villager": "Villager"
+    },
     "winCondition": {
       "werewolf": "【Win condition】Werewolves win when their count >= good players\n【Core goals】\n- Coordinate nightly kills; prioritize key roles (Seer > Witch > Hunter > Guard)\n- Disguise as good during the day and steer eliminations\n- Protect wolf teammates from focus",
       "seer": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- Check suspicious players nightly and collect info\n- Reveal at the right time to lead eliminations\n- Protect yourself; seer is a top wolf target",
@@ -1773,7 +1783,19 @@
       "guardConstraintTitle": "【Rule Constraint】",
       "guardCannotProtect": "Because you protected #{seat} last night, you CANNOT protect #{seat} {name} again tonight.",
       "guardFirstNight": "This is your first action—you haven't protected anyone before.",
-      "guardNoConstraint": "No constraint—you may protect any living player."
+      "guardNoConstraint": "No constraint—you may protect any living player.",
+      "roleConfig": "Game role setup: {roles}",
+      "roleConfigAbsent": "[DO NOT REFERENCE] This game does NOT include: {roles} — never mention or reason about these roles!",
+      "roleAbility": {
+        "werewolf": "Werewolf: evil team; each night coordinates with wolf teammates to kill one player; must disguise as good during the day and steer votes against good players.",
+        "whiteWolfKing": "White Wolf King: evil team; same as Werewolf, but has one extra ability — self-destruct during the day (once per game): takes one player with them (no last words for target), then the day's vote is skipped and night begins immediately.",
+        "seer": "Seer: good team; each night checks one player to learn if they are a werewolf or good; result is private (only the Seer knows); may choose when to reveal their identity publicly.",
+        "witch": "Witch: good team; has exactly ONE antidote (save a player at night) and ONE poison (kill a player at night) for the entire game; at most one potion per night; once used, gone forever. Only the Witch knows which potions she currently holds — others must infer.",
+        "hunter": "Hunter: good team; on death may immediately shoot one player (once per game); cannot shoot if killed by Witch's poison.",
+        "guard": "Guard: good team; each night protects one player from being killed by wolves; cannot protect the same player two nights in a row.",
+        "idiot": "Idiot: good team; immune to the first vote-out (reveals role, stays alive, then permanently loses voting rights); dies normally if killed by wolves or Witch's poison.",
+        "villager": "Villager: good team; no special ability; wins by analyzing speeches and voting to eliminate all werewolves."
+      }
     }
   },
   "devConsole": {

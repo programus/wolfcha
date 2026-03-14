@@ -1,4 +1,4 @@
-import type { DifficultyLevel, GameState, Player } from "@/types/game";
+import type { DifficultyLevel, GameState, Player, Role } from "@/types/game";
 import { isWolfRole } from "@/types/game";
 import type { SystemPromptPart } from "@/game/core/types";
 import type { LLMMessage } from "./llm";
@@ -563,6 +563,69 @@ ${checks.join("\n")}
   return null;
 };
 
+const ROLES_IN_DISPLAY_ORDER: Role[] = ["Werewolf", "WhiteWolfKing", "Seer", "Witch", "Hunter", "Guard", "Idiot", "Villager"];
+const SPECIAL_ROLES: Role[] = ["Seer", "Witch", "Hunter", "Guard", "Idiot", "WhiteWolfKing"];
+
+const getRoleShortName = (role: Role): string => {
+  const { t } = getI18n();
+  switch (role) {
+    case "Werewolf":      return t("promptUtils.roleShortName.werewolf");
+    case "WhiteWolfKing": return t("promptUtils.roleShortName.whiteWolfKing");
+    case "Seer":          return t("promptUtils.roleShortName.seer");
+    case "Witch":         return t("promptUtils.roleShortName.witch");
+    case "Hunter":        return t("promptUtils.roleShortName.hunter");
+    case "Guard":         return t("promptUtils.roleShortName.guard");
+    case "Idiot":         return t("promptUtils.roleShortName.idiot");
+    default:              return t("promptUtils.roleShortName.villager");
+  }
+};
+
+const getRoleAbilityNote = (role: Role): string => {
+  const { t } = getI18n();
+  switch (role) {
+    case "Werewolf":      return t("promptUtils.gameContext.roleAbility.werewolf");
+    case "WhiteWolfKing": return t("promptUtils.gameContext.roleAbility.whiteWolfKing");
+    case "Seer":          return t("promptUtils.gameContext.roleAbility.seer");
+    case "Witch":         return t("promptUtils.gameContext.roleAbility.witch");
+    case "Hunter":        return t("promptUtils.gameContext.roleAbility.hunter");
+    case "Guard":         return t("promptUtils.gameContext.roleAbility.guard");
+    case "Idiot":         return t("promptUtils.gameContext.roleAbility.idiot");
+    default:              return t("promptUtils.gameContext.roleAbility.villager");
+  }
+};
+
+export const buildRoleCompositionSection = (state: GameState): string => {
+  const { t } = getI18n();
+  const roleCounts: Partial<Record<Role, number>> = {};
+  for (const p of state.players) {
+    roleCounts[p.role] = (roleCounts[p.role] ?? 0) + 1;
+  }
+
+  const presentParts = ROLES_IN_DISPLAY_ORDER
+    .filter(role => (roleCounts[role] ?? 0) > 0)
+    .map(role => `${getRoleShortName(role)}×${roleCounts[role]}`);
+
+  const absentSpecials = SPECIAL_ROLES
+    .filter(role => !(roleCounts[role] ?? 0))
+    .map(role => getRoleShortName(role));
+
+  let body = t("promptUtils.gameContext.roleConfig", { roles: presentParts.join(" | ") });
+  if (absentSpecials.length > 0) {
+    body += "\n" + t("promptUtils.gameContext.roleConfigAbsent", {
+      roles: absentSpecials.join(t("promptUtils.gameContext.listSeparator")),
+    });
+  }
+
+  const abilityNotes = ROLES_IN_DISPLAY_ORDER
+    .filter(role => (roleCounts[role] ?? 0) > 0)
+    .map(role => getRoleAbilityNote(role));
+  if (abilityNotes.length > 0) {
+    body += "\n" + abilityNotes.join("\n");
+  }
+
+  return `<role_config>\n${body}\n</role_config>`;
+};
+
 export const buildGameContext = (
   state: GameState,
   player: Player,
@@ -636,6 +699,8 @@ alive_count: ${alivePlayers.length}
     .map((p) => `  - ${t("promptUtils.gameContext.seatLabel", { seat: p.seat + 1 })} ${p.displayName}${p.playerId === player.playerId ? t("promptUtils.gameContext.youSuffix") : ""}`)
     .join("\n");
   context += `\n\n<alive_players>\n${playerList}\n</alive_players>`;
+
+  context += `\n\n${buildRoleCompositionSection(state)}`;
 
   const wolfFriendlyFireNote = t("promptUtils.gameContext.wolfFriendlyFireNote");
   const phaseOrderNote =
