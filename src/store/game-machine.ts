@@ -37,6 +37,7 @@ const IN_PROGRESS_PHASES: Phase[] = [
   "DAY_BADGE_SPEECH",
   "DAY_BADGE_ELECTION",
   "DAY_PK_SPEECH",
+  "DAY_SPEECH_DIRECTION",
   "DAY_SPEECH",
   "DAY_LAST_WORDS",
   "DAY_VOTE",
@@ -149,6 +150,7 @@ function isPhaseActionCompleted(state: GameState): boolean {
 
     // 其他阶段比较复杂，暂不在中间保存
     case "DAY_RESOLVE":
+    case "DAY_SPEECH_DIRECTION":
     case "BADGE_TRANSFER":
     case "HUNTER_SHOOT":
       return false;
@@ -203,6 +205,7 @@ export function getRestorePhase(state: GameState): Phase {
     case "NIGHT_RESOLVE":
       // 回到预言家阶段
       return "NIGHT_SEER_ACTION";
+    case "DAY_SPEECH_DIRECTION":
     case "DAY_SPEECH":
     case "DAY_BADGE_SIGNUP":
     case "DAY_BADGE_SPEECH":
@@ -229,7 +232,7 @@ const VALID_PHASES: readonly string[] = [
   "NIGHT_START", "NIGHT_GUARD_ACTION", "NIGHT_WOLF_ACTION",
   "NIGHT_WITCH_ACTION", "NIGHT_SEER_ACTION", "NIGHT_RESOLVE",
   "DAY_START", "DAY_BADGE_SIGNUP", "DAY_BADGE_SPEECH", "DAY_BADGE_ELECTION",
-  "DAY_PK_SPEECH", "DAY_SPEECH", "DAY_LAST_WORDS", "DAY_VOTE", "DAY_RESOLVE",
+  "DAY_PK_SPEECH", "DAY_SPEECH_DIRECTION", "DAY_SPEECH", "DAY_LAST_WORDS", "DAY_VOTE", "DAY_RESOLVE",
   "BADGE_TRANSFER", "HUNTER_SHOOT", "GAME_END",
 ] as const;
 
@@ -757,6 +760,21 @@ export const PHASE_CONFIGS: Record<Phase, PhaseConfig> = {
     canSelectPlayer: () => false,
     actionType: "speech",
   },
+  DAY_SPEECH_DIRECTION: {
+    phase: "DAY_SPEECH_DIRECTION",
+    description: "phase.speechDirection.description",
+    humanDescription: (hp, gs) => {
+      const { t } = getI18n();
+      const sheriffSeat = gs.badge.holderSeat;
+      return hp?.alive && hp.seat === sheriffSeat ? t("phase.speechDirection.human") : t("phase.speechDirection.description");
+    },
+    requiresHumanInput: (hp, gs) => {
+      const sheriffSeat = gs.badge.holderSeat;
+      return (hp?.alive && hp.seat === sheriffSeat) || false;
+    },
+    canSelectPlayer: () => false,
+    actionType: "none",
+  },
   DAY_SPEECH: {
     phase: "DAY_SPEECH",
     description: "phase.daySpeech.description",
@@ -1019,6 +1037,7 @@ export const VALID_TRANSITIONS: Record<Phase, Phase[]> = {
   DAY_BADGE_SPEECH: ["DAY_BADGE_ELECTION", "WHITE_WOLF_KING_BOOM"],
   DAY_BADGE_ELECTION: ["DAY_PK_SPEECH", "DAY_SPEECH"],
   DAY_PK_SPEECH: ["DAY_BADGE_ELECTION", "DAY_VOTE", "WHITE_WOLF_KING_BOOM"],
+  DAY_SPEECH_DIRECTION: ["DAY_SPEECH"],
   DAY_SPEECH: ["DAY_VOTE", "WHITE_WOLF_KING_BOOM"],
   DAY_VOTE: ["DAY_RESOLVE"],
   DAY_RESOLVE: ["DAY_PK_SPEECH", "DAY_LAST_WORDS", "BADGE_TRANSFER", "NIGHT_START", "GAME_END"],

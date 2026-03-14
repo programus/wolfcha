@@ -278,6 +278,7 @@ interface DialogAreaProps {
   onWhiteWolfKingBoom?: () => void;
   onViewAnalysis?: () => void;
   isAnalysisLoading?: boolean;
+  onSpeechDirectionChoice?: (direction: "clockwise" | "counterclockwise") => void;
 }
 
 // 等待状态动画组件已移除，与当前简洁风格不符
@@ -391,6 +392,7 @@ export function DialogArea({
   onWhiteWolfKingBoom,
   onViewAnalysis,
   isAnalysisLoading = false,
+  onSpeechDirectionChoice,
 }: DialogAreaProps) {
   const t = useTranslations();
   const isGenshinMode = !!gameState.isGenshinMode;
@@ -1049,6 +1051,9 @@ export function DialogArea({
   const showHunterPassOption = phase === "HUNTER_SHOOT"
     && humanPlayer?.role === "Hunter"
     && selectedSeat === null;
+  const showSpeechDirection = phase === "DAY_SPEECH_DIRECTION"
+    && humanPlayer?.alive
+    && humanPlayer?.seat === gameState.badge.holderSeat;
   const showActionConfirm = (() => {
     const badgeCandidates = gameState.badge.candidates || [];
     const humanIsCandidate = humanPlayer && badgeCandidates.includes(humanPlayer.seat);
@@ -1070,7 +1075,7 @@ export function DialogArea({
     );
   })();
   const showWitchPanel = phase === "NIGHT_WITCH_ACTION" && humanPlayer?.role === "Witch" && !isWaitingForAI;
-  const showHumanInput = isHumanTurn && phase !== "GAME_END" && phase !== "DAY_BADGE_SIGNUP";
+  const showHumanInput = isHumanTurn && phase !== "GAME_END" && phase !== "DAY_BADGE_SIGNUP" && phase !== "DAY_SPEECH_DIRECTION";
   const showDialogueBlock = !isHumanTurn
     && (currentSpeaker || waitingForNextRound)
     && shouldShowDialogue
@@ -1090,6 +1095,7 @@ export function DialogArea({
     || showBadgeSignupWaiting
     || showBadgeTransferOption
     || showHunterPassOption
+    || showSpeechDirection
     || showActionConfirm
     || showWitchPanel
     || showHumanInput
@@ -1279,6 +1285,37 @@ export function DialogArea({
                         {t("ui.restart")}
                       </button>
                     </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* 警长选择发言方向 */}
+              {showSpeechDirection && (
+                <motion.div
+                  key="speech-direction"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <div className="text-lg leading-relaxed text-[var(--text-primary)]">
+                    {t("phase.speechDirection.human")}
+                  </div>
+                  <div className={`flex items-center justify-end gap-3 mt-4 pt-3 border-t ${isNight ? "border-white/10" : "border-black/5"}`}>
+                    <button
+                      onClick={() => onSpeechDirectionChoice?.("counterclockwise")}
+                      className="wc-action-btn text-sm h-9 px-4"
+                      type="button"
+                    >
+                      {t("bottomAction.speechDirection.counterclockwise")}
+                    </button>
+                    <button
+                      onClick={() => onSpeechDirectionChoice?.("clockwise")}
+                      className="wc-action-btn wc-action-btn--primary text-sm h-9 px-4"
+                      type="button"
+                    >
+                      {t("bottomAction.speechDirection.clockwise")}
+                      <CaretRight size={14} weight="bold" />
+                    </button>
                   </div>
                 </motion.div>
               )}

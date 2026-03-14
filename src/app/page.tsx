@@ -164,6 +164,7 @@ export default function Home() {
     handleHumanVote,
     handleNightAction,
     handleHumanBadgeTransfer,
+    handleHumanSpeechDirectionChoice,
     handleWhiteWolfKingBoom,
     handleNextRound,
     waitingForNextRound,
@@ -1594,6 +1595,7 @@ export default function Home() {
                       onBadgeSignup={handleBadgeSignup}
                       onRestart={restartGame}
                       onWhiteWolfKingBoom={handleWhiteWolfKingBoom}
+                      onSpeechDirectionChoice={handleHumanSpeechDirectionChoice}
                       onViewAnalysis={handleViewAnalysis}
                       isAnalysisLoading={isAnalysisLoading}
                     />

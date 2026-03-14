@@ -34,6 +34,7 @@ import {
   generateDailySummary,
   getNextAliveSeat,
   generateWhiteWolfKingBoomDecision,
+  generateAISpeechDirection,
 } from "@/lib/game-master";
 import { buildGenshinModelRefs, generateCharacters, generateGenshinModeCharacters, sampleModelRefs, type GeneratedCharacter } from "@/lib/character-generator";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
@@ -140,6 +141,8 @@ export function useGameLogic() {
   const onBadgeSpeechEndRef = useRef<((state: GameState) => Promise<void>) | null>(null);
   const onPkSpeechEndRef = useRef<((state: GameState) => Promise<void>) | null>(null);
   const wwkBoomCheckRef = useRef<((state: GameState, wwk: Player) => Promise<boolean>) | null>(null);
+  const chooseSpeechDirectionRef = useRef<((state: GameState, sheriff: Player, deadSeats: number[]) => Promise<"clockwise" | "counterclockwise">) | null>(null);
+  const humanSpeechDirectionResolveRef = useRef<((dir: "clockwise" | "counterclockwise") => void) | null>(null);
 
   // 游戏启动相关 refs
   const pendingStartStateRef = useRef<GameState | null>(null);
@@ -309,6 +312,13 @@ export function useGameLogic() {
           return fn(state, wwk);
         }
         return false;
+      },
+      onChooseSpeechDirection: async (state: GameState, sheriff: Player, deadSeats: number[]): Promise<"clockwise" | "counterclockwise"> => {
+        const fn = chooseSpeechDirectionRef.current;
+        if (fn) {
+          return fn(state, sheriff, deadSeats);
+        }
+        return "clockwise";
       },
       onBadgeTransfer: async (state: GameState, sheriff: Player, afterTransfer: (s: GameState) => Promise<void>) => {
         const fn = badgeTransferRef.current;
@@ -680,6 +690,28 @@ export function useGameLogic() {
     const proceedFn = proceedToNightRef.current;
     if (proceedFn) await proceedFn(currentState, token);
     return true;
+  };
+
+  // 警长选择发言方向（人类或AI警长）
+  chooseSpeechDirectionRef.current = async (
+    state: GameState,
+    sheriff: Player,
+    deadSeats: number[]
+  ): Promise<"clockwise" | "counterclockwise"> => {
+    if (sheriff.isHuman) {
+      // 人类警长：切换到 DAY_SPEECH_DIRECTION 阶段，等待玩家点击按钮
+      const directionState = transitionPhase(state, "DAY_SPEECH_DIRECTION");
+      setGameState(directionState);
+      setDialogue(t("speakers.hint"), t("phase.speechDirection.human"), false);
+      return new Promise<"clockwise" | "counterclockwise">((resolve) => {
+        humanSpeechDirectionResolveRef.current = resolve;
+      });
+    } else {
+      // AI 警长：展示等待提示，调用 LLM 决策
+      setDialogue(speakerHost, t("ui.sheriffDecidingDirection"), false);
+      const direction = await generateAISpeechDirection(state, sheriff, deadSeats);
+      return direction;
+    }
   };
 
   // ============================================
@@ -2071,6 +2103,13 @@ export function useGameLogic() {
     await badgePhase.handleHumanBadgeTransfer(targetSeat);
   }, [badgePhase]);
 
+  /** 人类警长选择发言方向 */
+  const handleHumanSpeechDirectionChoice = useCallback((direction: "clockwise" | "counterclockwise") => {
+    const resolve = humanSpeechDirectionResolveRef.current;
+    humanSpeechDirectionResolveRef.current = null;
+    if (resolve) resolve(direction);
+  }, []);
+
   /** 推进发言 */
   const advanceSpeech = useCallback(async (): Promise<{ finished: boolean; shouldAdvanceToNextSpeaker: boolean; shouldAutoAdvanceToNextAI: boolean }> => {
     if (gameStateRef.current.phase === "GAME_END" || gameStateRef.current.winner) {
@@ -2193,6 +2232,7 @@ export function useGameLogic() {
     handleHumanVote,
     handleNightAction,
     handleHumanBadgeTransfer,
+    handleHumanSpeechDirectionChoice,
     handleWhiteWolfKingBoom,
     handleNextRound,
     scrollToBottom,

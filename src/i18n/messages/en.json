@@ -652,6 +652,10 @@
     "confirmAction": {
       "whiteWolfKingBoom": "Self-destruct & take #{seat}",
       "whiteWolfKingBoomBtn": "Self-destruct"
+    },
+    "speechDirection": {
+      "clockwise": "Clockwise",
+      "counterclockwise": "Counterclockwise"
     }
   },
   "mentions": {
@@ -977,7 +981,8 @@
     "seatNumber": "Seat {seat}",
     "seatWithName": "Seat {seat} {name}",
     "seatOnly": "Seat {seat}",
-    "listSeparator": ", "
+    "listSeparator": ", ",
+    "sheriffDecidingDirection": "The sheriff is deciding the speaking order…"
   },
   "prompts": {
     "daySpeech": {
@@ -1110,6 +1115,16 @@
       "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n{winCondition}\n\n{difficultyHint}",
       "task": "【White Wolf King Self-Destruct Ability】\nYou are the White Wolf King. You may choose to self-destruct during the day. When you self-destruct, you take one alive player with you (no last words for them). After self-destruct, the day ends and night begins immediately, skipping the vote.\n\n【When to Self-Destruct】\n- Your identity has been exposed and you're about to be voted out\n- There's a confirmed high-value role you can take out\n- The wolf team is in crisis and needs to disrupt the village\n\n【When NOT to Self-Destruct】\n- Your identity is still hidden and you're not suspected\n- The situation favors the wolves; no need to take risks\n- No clear high-value target to take out\n\n【Target Priority】\nSeer > Witch > Hunter > Guard > Key villagers\n\n【Task】\nBased on the current situation, decide whether to self-destruct. If yes, choose a target seat number. If no, reply pass.\n\nAlive players: {options}",
       "user": "{context}\n\nShould you self-destruct? If yes, which seat?\n\n【Format】\nReply with a seat number (self-destruct and take that player), e.g., 5\nReply pass (do not self-destruct)\nNo explanations, no extra text, no code blocks"
+    },
+    "speechDirection": {
+      "peaceful": "(Peaceful night — no deaths)",
+      "noTranscript": "(No speeches recorded yet today)",
+      "system": "You are Seat {seat} \"{name}\", the sheriff this game. You must decide the speaking order direction for today.\nToday's dead: {deadInfo}\n\n【Rules】\n- Single death: the speaking circle starts from the seat next to the dead player; sheriff speaks last\n- Multiple deaths / peaceful night: the speaking circle starts from the seat next to you (the sheriff); sheriff speaks last\n- You choose the direction of the circle (clockwise or counterclockwise); the starting seat is determined by the rule above\n\n{tactics}",
+      "tactics": {
+        "village": "【Village sheriff tactics — goal: expose wolves, protect key roles】\n1. Put the most suspected player first: first speakers cannot copycat and must take an independent stance — logic slips are more likely\n2. Let trusted god-roles (seer, key info-holding village) speak later: they benefit from hearing suspicious players first before committing to a position\n3. If there were last words / deathbed pointing yesterday, put the accused early — force them to self-justify immediately\n4. Separate players you suspect are teammates: put one early and one late, then check whether their statements are consistent\n5. On a peaceful night, put the seat with the most abnormal behavior or weakest prior logic early — give later speakers material to build on\n6. You speak last: hear everyone out before taking a position and directing the vote to the most evidenced target",
+        "wolf": "【Wolf sheriff tactics — goal: cover teammates, suppress god-roles】\n1. Put wolf teammates later: they can hear the village's stance first and echo it, reducing the risk of a counter-attack\n2. Put strong god-roles (seer, claimed witch, claimed guard) early: they are forced to commit before gathering full info and become easier targets for counter-claims\n3. Push the most suspicious villager into the first slot: if they speak strongly, it's harder to rebut them later — but you can redirect the vote at the end\n4. If a teammate plans to counter-claim a real god-role, arrange the speaking order so the teammate speaks after the real role reveals, creating maximum confusion\n5. Use the direction to sandwich your intended execution target between two weak speakers, reducing their impact\n6. On a peaceful night, prioritize exposing the player you fear most (e.g., a seer who has checks but hasn't claimed yet) by putting them in an early slot"
+      },
+      "user": "{gameContext}\n\n【Today's speeches (if any)】\n{todayTranscript}\n\nBased on the situation above, choose the speaking direction.\nOutput exactly one of the following words, no explanations, no other text:\nclockwise\ncounterclockwise"
     }
   },
   "badgePhase": {
@@ -1171,6 +1186,10 @@
     },
     "pkSpeech": {
       "description": "PK speeches"
+    },
+    "speechDirection": {
+      "description": "Sheriff chooses speaking order",
+      "human": "Choose the speaking direction"
     },
     "daySpeech": {
       "description": "Discussion phase"

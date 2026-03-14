@@ -22,6 +22,7 @@ import {
   getSpeakingOrder,
   killPlayer,
   transitionPhase,
+  generateAISpeechDirection,
 } from "@/lib/game-master";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
 import { getI18n } from "@/i18n/translator";
@@ -44,29 +45,20 @@ type DaySpeechRuntime = {
   onPkSpeechEnd: (state: GameState) => Promise<void>;
   /** AI白狼王自爆决策：返回 true 表示已自爆（由调用方处理后续），false 表示不自爆 */
   onWhiteWolfKingBoomCheck: (state: GameState, wwk: Player) => Promise<boolean>;
+  /**
+   * 警长选择发言顺序方向。
+   * - 人类警长：切换到 DAY_SPEECH_DIRECTION 阶段，等待 UI 中的方向按钮点击，resolve 后携带方向返回。
+   * - AI 警长：调用 generateAISpeechDirection，UI 提示"警长正在考虑..."，resolve 后携带方向返回。
+   */
+  onChooseSpeechDirection: (
+    state: GameState,
+    sheriff: Player,
+    deadSeats: number[]
+  ) => Promise<"clockwise" | "counterclockwise">;
 };
 
 export class DaySpeechPhase extends GamePhase {
   private isMovingToNextSpeaker = false;
-
-  private resolveSpeechDirection(state: GameState, startSeat: number | null): "clockwise" | "counterclockwise" {
-    if (startSeat === null) return "clockwise";
-    const sheriffSeat = state.badge.holderSeat;
-    if (sheriffSeat === null) return "clockwise";
-
-    const aliveSeats = state.players.filter((p) => p.alive).map((p) => p.seat).sort((a, b) => a - b);
-    if (!aliveSeats.includes(startSeat) || !aliveSeats.includes(sheriffSeat)) return "clockwise";
-
-    const total = aliveSeats.length;
-    const startIndex = aliveSeats.indexOf(startSeat);
-    const sheriffIndex = aliveSeats.indexOf(sheriffSeat);
-    if (startIndex === sheriffIndex) return "clockwise";
-
-    const clockwiseSteps = (sheriffIndex - startIndex + total) % total;
-    const counterSteps = (startIndex - sheriffIndex + total) % total;
-    return clockwiseSteps >= counterSteps ? "clockwise" : "counterclockwise";
-  }
-
   async onEnter(_context: GameContext): Promise<void> {
     return;
   }
@@ -256,6 +248,9 @@ export class DaySpeechPhase extends GamePhase {
     if (!raw.onWhiteWolfKingBoomCheck) {
       raw.onWhiteWolfKingBoomCheck = async () => false;
     }
+    if (!raw.onChooseSpeechDirection) {
+      raw.onChooseSpeechDirection = async (_state, _sheriff, _deadSeats) => "clockwise";
+    }
     return raw;
   }
 
@@ -378,20 +373,42 @@ export class DaySpeechPhase extends GamePhase {
         await playNarrator("discussionStart");
 
         const alivePlayers = speechState.players.filter((p) => p.alive);
-        const speechDirection: "clockwise" = "clockwise";
         
         // 判断警徽是否移交成功
         const newSheriffSeat = speechState.badge.holderSeat;
         const isNewSheriffAlive = newSheriffSeat !== null && 
           alivePlayers.some((p) => p.seat === newSheriffSeat);
-        
+
+        // 收集死者座位（用于 AI 判断发言方向）
+        const deadSeatsForDirection: number[] = [];
+        if (wolfVictim) deadSeatsForDirection.push(wolfVictim.seat);
+        if (poisonVictim) deadSeatsForDirection.push(poisonVictim.seat);
+        if (deadSheriff) deadSeatsForDirection.push(deadSheriff.seat);
+
+        // 决定发言方向
+        let speechDirection: "clockwise" | "counterclockwise";
         let startSeat: number | null;
-        if (isNewSheriffAlive) {
-          // 警徽移交成功：从新警长下一位开始，新警长最后发言
-          startSeat = getNextAliveSeat(speechState, newSheriffSeat, true, speechDirection);
+
+        if (isNewSheriffAlive && newSheriffSeat !== null) {
+          const newSheriffPlayer = alivePlayers.find((p) => p.seat === newSheriffSeat)!;
+          // 有警长：警长决定方向，单死从死者旁边开始；多死/平安夜从警长旁边开始
+          speechDirection = await runtime.onChooseSpeechDirection(speechState, newSheriffPlayer, deadSeatsForDirection);
+          if (deadSeatsForDirection.length === 1) {
+            // 单死：从死者旁边开始（警长最后发言）
+            startSeat = getNextAliveSeat(speechState, deadSeatsForDirection[0], true, speechDirection);
+          } else {
+            // 多死 / 平安（包含死去的旧警长）：从新警长旁边开始（警长最后发言）
+            startSeat = getNextAliveSeat(speechState, newSheriffSeat, true, speechDirection);
+          }
         } else {
-          // 警徽撕毁：从死者下一位开始
-          startSeat = getNextAliveSeat(speechState, deadSheriff.seat, false, speechDirection);
+          // 警徽撕毁：随机方向，从随机存活玩家开始
+          speechDirection = Math.random() < 0.5 ? "clockwise" : "counterclockwise";
+          const aliveSeats = alivePlayers.map((p) => p.seat).sort((a, b) => a - b);
+          if (deadSheriff && aliveSeats.length > 0) {
+            startSeat = getNextAliveSeat(speechState, deadSheriff.seat, false, speechDirection);
+          } else {
+            startSeat = aliveSeats[Math.floor(Math.random() * aliveSeats.length)] ?? null;
+          }
         }
         
         const firstSpeaker =
@@ -435,23 +452,46 @@ export class DaySpeechPhase extends GamePhase {
     await playNarrator("discussionStart");
 
     const alivePlayers = speechState.players.filter((p) => p.alive);
-    const speechDirection: "clockwise" = "clockwise";
     const sheriffSeat = speechState.badge.holderSeat;
     const isSheriffAlive =
       typeof sheriffSeat === "number" && alivePlayers.some((p) => p.seat === sheriffSeat);
 
-    // 确定发言起始位置
+    // 收集今日死者座位（用于 AI 判断方向时告知信息）
+    const deadSeatsForDirection: number[] = [];
+    if (wolfVictim) deadSeatsForDirection.push(wolfVictim.seat);
+    if (poisonVictim) deadSeatsForDirection.push(poisonVictim.seat);
+
+    // 决定发言方向与起始座位
+    let speechDirection: "clockwise" | "counterclockwise";
     let startSeat: number | null;
-    if (isSheriffAlive) {
-      // 有警长存活：从警长下一位开始，警长最后发言
-      startSeat = getNextAliveSeat(speechState, sheriffSeat, true, speechDirection);
-    } else if (wolfVictim) {
-      // 无警长但有死者：从死者下一位开始
-      startSeat = getNextAliveSeat(speechState, wolfVictim.seat, false, speechDirection);
+
+    if (isSheriffAlive && typeof sheriffSeat === "number") {
+      const sheriffPlayer = alivePlayers.find((p) => p.seat === sheriffSeat)!;
+      // 有存活警长：警长决定方向
+      speechDirection = await runtime.onChooseSpeechDirection(speechState, sheriffPlayer, deadSeatsForDirection);
+
+      if (deadSeatsForDirection.length === 1) {
+        // 单死：真实规则 —— 从死者旁边开始（警长最后）
+        startSeat = getNextAliveSeat(speechState, deadSeatsForDirection[0], true, speechDirection);
+      } else if (deadSeatsForDirection.length > 1) {
+        // 多死：从警长旁边开始（警长最后）
+        startSeat = getNextAliveSeat(speechState, sheriffSeat, true, speechDirection);
+      } else {
+        // 平安夜：从警长旁边开始（警长最后）
+        startSeat = getNextAliveSeat(speechState, sheriffSeat, true, speechDirection);
+      }
     } else {
-      // 无警长无死者（和平夜）：从最小座位号开始
+      // 无警长：随机方向 + 随机起始（模拟法官看分针规则）
+      speechDirection = Math.random() < 0.5 ? "clockwise" : "counterclockwise";
       const aliveSeats = alivePlayers.map((p) => p.seat).sort((a, b) => a - b);
-      startSeat = aliveSeats[0] ?? null;
+      if (deadSeatsForDirection.length > 0) {
+        // 有死者：从死者下一位开始
+        const firstDead = deadSeatsForDirection[0];
+        startSeat = getNextAliveSeat(speechState, firstDead, false, speechDirection);
+      } else {
+        // 平安夜：随机起始
+        startSeat = aliveSeats[Math.floor(Math.random() * aliveSeats.length)] ?? null;
+      }
     }
     
     const firstSpeaker =

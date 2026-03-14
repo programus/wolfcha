@@ -32,6 +32,7 @@ interface BottomActionPanelProps {
   onCancelSelection: () => void;
   onNightAction: (seat: number, actionType?: WitchActionType) => void;
   onRestart: () => void;
+  onSpeechDirectionChoice?: (direction: "clockwise" | "counterclockwise") => void;
 }
 
 export function BottomActionPanel({
@@ -44,6 +45,7 @@ export function BottomActionPanel({
   onCancelSelection,
   onNightAction,
   onRestart,
+  onSpeechDirectionChoice,
 }: BottomActionPanelProps) {
   const t = useTranslations();
   const phase = gameState.phase;
@@ -224,6 +226,30 @@ export function BottomActionPanel({
             >
               <X size={16} />
               {t("bottomAction.pass")}
+            </button>
+          </motion.div>
+        )}
+
+        {/* 警长选择发言方向 */}
+        {phase === "DAY_SPEECH_DIRECTION" && humanPlayer?.alive && humanPlayer.seat === gameState.badge.holderSeat && (
+          <motion.div
+            key="speech-direction"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="wc-bottom-action-row flex gap-2 w-full items-center"
+          >
+            <button
+              onClick={() => onSpeechDirectionChoice?.("counterclockwise")}
+              className={`inline-flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-sm cursor-pointer active:scale-[0.98] transition-all duration-150 flex-1 ${neutralButtonClass}`}
+            >
+              {t("bottomAction.speechDirection.counterclockwise")}
+            </button>
+            <button
+              onClick={() => onSpeechDirectionChoice?.("clockwise")}
+              className={`inline-flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-sm cursor-pointer active:scale-[0.98] transition-all duration-150 flex-1 ${neutralButtonClass}`}
+            >
+              {t("bottomAction.speechDirection.clockwise")}
             </button>
           </motion.div>
         )}

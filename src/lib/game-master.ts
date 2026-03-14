@@ -23,7 +23,7 @@ import { aiLogger } from "./ai-logger";
 import { getGeneratorModel, getSummaryModel } from "@/lib/api-keys";
 import { PhaseManager } from "@/game/core/PhaseManager";
 import type { PromptResult } from "@/game/core/types";
-import { buildCachedSystemMessageFromParts } from "./prompt-utils";
+import { buildCachedSystemMessageFromParts, buildGameContext, buildTodayTranscript } from "./prompt-utils";
 import { getI18n } from "@/i18n/translator";
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -2036,4 +2036,83 @@ export async function generateWhiteWolfKingBoomDecision(
   });
 
   return parsedTarget;
+}
+
+
+/**
+ * AI 警长决定白天发言顺序方向（顺时针 or 逆时针）
+ * 返回 "clockwise" 或 "counterclockwise"
+ */
+export async function generateAISpeechDirection(
+  state: GameState,
+  sheriff: Player,
+  deadSeats: number[]
+): Promise<"clockwise" | "counterclockwise"> {
+  const { t } = getI18n();
+
+  const gameContext = buildGameContext(state, sheriff);
+  const todayTranscript = buildTodayTranscript(state, undefined, { includeDeadSpeech: true });
+
+  const deadInfo = deadSeats.length > 0
+    ? deadSeats.map((s) => t("ui.seatNumber", { seat: s + 1 })).join(t("common.listSeparator"))
+    : t("prompts.speechDirection.peaceful");
+
+  const tactics = isWolfRole(sheriff.role)
+    ? t("prompts.speechDirection.tactics.wolf")
+    : t("prompts.speechDirection.tactics.village");
+
+  const systemPrompt = t("prompts.speechDirection.system", {
+    seat: sheriff.seat + 1,
+    name: sheriff.displayName,
+    deadInfo,
+    tactics,
+  });
+  const userPrompt = t("prompts.speechDirection.user", {
+    gameContext,
+    todayTranscript: todayTranscript || t("prompts.speechDirection.noTranscript"),
+  });
+  const startTime = Date.now();
+
+  const messages: LLMMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+
+  let direction: "clockwise" | "counterclockwise" = "clockwise";
+
+  try {
+    const result = await generateCompletion(mergeOptionsFromModelRef(sheriff.agentProfile!.modelRef, {
+      model: sheriff.agentProfile!.modelRef.model,
+      messages,
+      temperature: GAME_TEMPERATURE.ACTION,
+    }));
+
+    const cleaned = stripMarkdownCodeFences(result.content).toLowerCase().trim();
+    if (cleaned.includes("counter") || cleaned.includes("逆时针") || cleaned.includes("ccw")) {
+      direction = "counterclockwise";
+    } else {
+      direction = "clockwise";
+    }
+
+    await aiLogger.log({
+      type: "speech_direction",
+      request: {
+        model: sheriff.agentProfile!.modelRef.model,
+        messages,
+        player: { playerId: sheriff.playerId, displayName: sheriff.displayName, seat: sheriff.seat, role: sheriff.role },
+      },
+      response: {
+        content: cleaned,
+        raw: result.content,
+        rawResponse: JSON.stringify(result.raw, null, 2),
+        finishReason: result.raw.choices?.[0]?.finish_reason,
+        parsed: { direction },
+        duration: Date.now() - startTime,
+      },
+    });
+  } catch {
+    direction = "clockwise";
+  }
+
+  return direction;
 }

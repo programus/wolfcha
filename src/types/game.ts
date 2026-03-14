@@ -47,6 +47,7 @@ export type Phase =
   | "DAY_BADGE_SPEECH"     // 警徽竞选发言
   | "DAY_BADGE_ELECTION"   // 警徽评选
   | "DAY_PK_SPEECH"        // PK发言
+  | "DAY_SPEECH_DIRECTION"  // 警长决定发言方向
   | "DAY_SPEECH"
   | "DAY_LAST_WORDS"
   | "DAY_VOTE"
