@@ -2017,9 +2017,16 @@
       "werewolfParticipated": "Participated in wolf kill"
     },
     "dailySummary": {
-      "systemPrompt": "You are an objective Werewolf game recorder.\n\nTask: Compress the given record into BULLET LIST for long-term memory.\n\nCore principles\n- Objectively record \"who said what, who did what\". No judgments.\n- Preserve original points and stances, not your opinions.\n- Record facts only; avoid speculative causality.\n- Do NOT write: \"because they campaigned/claimed/spoke today, they were killed last night\".\n- If the log shows \"campaign first, death announcement later\", treat it as announcement order only; the kill still happened at night.\n\nMust include (ALL required)\n1. Night result: peaceful night / who died / cause of death\n2. Sheriff result: who ran, who won, vote counts\n3. Role claims: who claimed what role, what checks reported\n4. Each speaking player's core viewpoint (1 sentence summary)\n5. Alignment stances: who supported whom, who questioned whom\n6. Vote result: who was exiled, vote distribution\n\nFormat requirements\n- Must include seat numbers (e.g., \"Seat 2\")\n- Keep each bullet short\n- 6-12 bullets required\n- Ensure EVERY speaking player is recorded\n\nOutput format: strictly return JSON:\n'{' \"bullets\": [\"Point 1\", \"Point 2\", ...] '}'",
+      "systemPrompt": "You are an objective Werewolf game recorder.\n\nTask: Compress the given DAYTIME SPEECH record into BULLET LIST for long-term memory.\n\nCore principles\n- Objectively record \"who said what, who did what\". No judgments.\n- Preserve original points and stances, not your opinions.\n- Record facts only; avoid speculative causality.\n- Do NOT write: \"because they campaigned/claimed/spoke today, they were killed last night\".\n\nMust include (ALL required)\n1. Role claims: who claimed what role, what checks reported\n2. Each speaking player's core viewpoint (1 sentence summary)\n3. Alignment stances: who supported whom, who questioned whom\n\nNote: Night results, sheriff election results, and execution vote results are ALL automatically recorded by the system — do NOT include any of these in your output.\n\nFormat requirements\n- Must include seat numbers (e.g., \"Seat 2\")\n- Keep each bullet short\n- 3-8 bullets required\n- Ensure EVERY speaking player is recorded\n\nOutput format: strictly return JSON:\n'{' \"bullets\": [\"Point 1\", \"Point 2\", ...] '}'",
       "userPrompt": "【Day {day} Daytime Log】\n{transcript}\n\nStrictly return JSON:",
-      "fallbackText": "Day {day}: No summary available"
+      "fallbackText": "Day {day}: No summary available",
+      "voteSummarySheriff": "Sheriff election: {winner} elected. Votes: {voteList}",
+      "voteSummaryExecution": "Execution vote: {eliminated} eliminated. Votes: {voteList}",
+      "voteSummaryTied": "Execution vote: tie, no one eliminated",
+      "voteSummaryEntry": "Seat {seat}({count} votes)",
+      "nightPeaceful": "Last night was peaceful — no one died",
+      "nightDeath": "Last night {seatLabel} {name} was eliminated",
+      "nightHunterShot": "Hunter {hunter} fired at night and eliminated {target}"
     },
     "voteFallback": {
       "missingReason": "No reason provided",

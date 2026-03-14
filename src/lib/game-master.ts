@@ -593,6 +593,95 @@ export function tallyVotes(state: GameState): { seat: number; count: number } | 
   return { seat: maxSeat, count: maxVotes };
 }
 
+/** Build deterministic night-result bullet strings from nightHistory, so the AI never has to summarise night outcomes. */
+function buildNightResultBullets(day: number, state: GameState): string[] {
+  const { t } = getI18n();
+  const nightData = state.nightHistory?.[day];
+  if (!nightData) return [];
+
+  const bullets: string[] = [];
+
+  // Collect actual deaths this night
+  const deaths = nightData.deaths ?? [];
+  const deadSeats = new Set(deaths.map((d) => d.seat));
+
+  if (deadSeats.size === 0) {
+    // Peaceful night — nobody died
+    bullets.push(t("gameMaster.dailySummary.nightPeaceful"));
+  } else {
+    for (const death of deaths) {
+      const player = state.players.find((p) => p.seat === death.seat);
+      const seatLabel = t("voteResult.seatLabel", { seat: death.seat + 1 });
+      const nameStr = player ? ` ${player.displayName}` : "";
+      bullets.push(t("gameMaster.dailySummary.nightDeath", { seatLabel, name: nameStr.trim() }));
+    }
+  }
+
+  // Night hunter shot (rare — hunter killed at night and immediately fires back)
+  if (nightData.hunterShot) {
+    const { hunterSeat, targetSeat } = nightData.hunterShot;
+    const hunterLabel = t("voteResult.seatLabel", { seat: hunterSeat + 1 });
+    const targetLabel = t("voteResult.seatLabel", { seat: targetSeat + 1 });
+    const targetPlayer = state.players.find((p) => p.seat === targetSeat);
+    bullets.push(
+      t("gameMaster.dailySummary.nightHunterShot", {
+        hunter: hunterLabel,
+        target: targetPlayer ? `${targetLabel} ${targetPlayer.displayName}` : targetLabel,
+      })
+    );
+  }
+
+  return bullets;
+}
+
+/** Build deterministic vote-summary bullet strings from structured voteData, so the AI never has to guess vote outcomes. */
+function buildVoteBulletsFromVoteData(
+  voteData: DailySummaryVoteData | undefined,
+  state: GameState
+): { sheriff: string[]; execution: string[] } {
+  const result: { sheriff: string[]; execution: string[] } = { sheriff: [], execution: [] };
+  if (!voteData) return result;
+  const { t } = getI18n();
+
+  const formatVoteList = (votes: Record<string, number[]>): string => {
+    const sep = t("common.listSeparator");
+    return Object.entries(votes)
+      .filter(([, vs]) => vs.length > 0)
+      .sort(([, a], [, b]) => b.length - a.length)
+      .map(([seatStr, vs]) =>
+        t("gameMaster.dailySummary.voteSummaryEntry", { seat: parseInt(seatStr) + 1, count: vs.length })
+      )
+      .join(sep);
+  };
+
+  if (voteData.sheriff_election) {
+    const { winner, votes } = voteData.sheriff_election;
+    const winnerPlayer = state.players.find((p) => p.seat === winner);
+    const winnerSeatLabel = t("voteResult.seatLabel", { seat: winner + 1 });
+    const winnerDesc = winnerPlayer ? `${winnerSeatLabel} ${winnerPlayer.displayName}` : winnerSeatLabel;
+    result.sheriff.push(
+      t("gameMaster.dailySummary.voteSummarySheriff", { winner: winnerDesc, voteList: formatVoteList(votes) })
+    );
+  }
+
+  if (voteData.execution_vote) {
+    const { eliminated, votes } = voteData.execution_vote;
+    if (eliminated >= 0) {
+      const elimPlayer = state.players.find((p) => p.seat === eliminated);
+      const elimDesc = elimPlayer
+        ? `${t("voteResult.seatLabel", { seat: eliminated + 1 })} ${elimPlayer.displayName}`
+        : t("voteResult.seatLabel", { seat: eliminated + 1 });
+      result.execution.push(
+        t("gameMaster.dailySummary.voteSummaryExecution", { eliminated: elimDesc, voteList: formatVoteList(votes) })
+      );
+    } else {
+      result.execution.push(t("gameMaster.dailySummary.voteSummaryTied"));
+    }
+  }
+
+  return result;
+}
+
 /** Extract structured vote_data from [VOTE_RESULT] in day messages. Preserves "who voted for whom" so it is not lost when context is trimmed. */
 function extractVoteDataFromDayMessages(
   dayMessages: ChatMessage[],
@@ -653,6 +742,8 @@ export async function generateDailySummary(
 
   const dayMessages = state.messages.slice(dayStartIndex);
   const voteData = extractVoteDataFromDayMessages(dayMessages, state);
+  const nightBullets = buildNightResultBullets(state.day, state);
+  const voteBullets = buildVoteBulletsFromVoteData(voteData, state);
 
   const transcript = dayMessages
     .map((m) => {
@@ -706,12 +797,21 @@ export async function generateDailySummary(
       
       // Handle bullets array format (expected from AI)
       if (obj.bullets && Array.isArray(obj.bullets) && obj.bullets.length > 0) {
-        return { bullets: obj.bullets.map(b => String(b)), facts: [], voteData };
+        const aiBullets = obj.bullets.map(b => String(b));
+        return {
+          bullets: [...nightBullets, ...voteBullets.sheriff, ...aiBullets, ...voteBullets.execution],
+          facts: [],
+          voteData,
+        };
       }
-      
+
       // Handle summary string format (fallback)
       if (typeof obj.summary === "string" && obj.summary.trim()) {
-        return { bullets: [obj.summary.trim()], facts: [], voteData };
+        return {
+          bullets: [...nightBullets, ...voteBullets.sheriff, obj.summary.trim(), ...voteBullets.execution],
+          facts: [],
+          voteData,
+        };
       }
     }
   } catch {
@@ -723,7 +823,10 @@ export async function generateDailySummary(
     .replace(/```json\s*|\s*```/g, "")
     .trim();
 
-  return { bullets: fallback ? [fallback] : [], facts: [], voteData };
+  if (fallback) {
+    return { bullets: [...nightBullets, ...voteBullets.sheriff, fallback, ...voteBullets.execution], facts: [], voteData };
+  }
+  return { bullets: [...nightBullets, ...voteBullets.sheriff, ...voteBullets.execution], facts: [], voteData };
 }
 
 export async function* generateAISpeechStream(
