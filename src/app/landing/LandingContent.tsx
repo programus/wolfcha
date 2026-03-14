@@ -964,7 +964,7 @@ export function LandingContent() {
           </div>
           <div className="flex gap-6 opacity-60">
             <a
-              href="https://github.com/oil-oil/wolfcha"
+              href="https://github.com/programus/wolfcha"
               target="_blank"
               rel="noopener noreferrer"
               className="transition-colors hover:text-[var(--color-gold)]"

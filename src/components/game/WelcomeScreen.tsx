@@ -339,7 +339,7 @@ export function WelcomeScreen({
 
   // Fetch GitHub stars
   useEffect(() => {
-    fetch('https://api.github.com/repos/oil-oil/wolfcha')
+    fetch('https://api.github.com/repos/programus/wolfcha')
       .then(res => res.json())
       .then(data => {
         if (data.stargazers_count !== undefined) {
@@ -731,7 +731,7 @@ export function WelcomeScreen({
 
               <Button asChild variant="outline" className="justify-start">
                 <a
-                  href="https://github.com/oil-oil/wolfcha"
+                  href="https://github.com/programus/wolfcha"
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -745,7 +745,7 @@ export function WelcomeScreen({
         </Dialog>
 
         {/* Scattered sponsor cards */}
-        <div className="wc-sponsor-cards" aria-label={t("welcome.sponsor.showcaseLabel")}>
+        <div className="hidden wc-sponsor-cards" aria-label={t("welcome.sponsor.showcaseLabel")}>
           {/* Sponsor card - OpenCreator (左侧) */}
           <SponsorCard
             sponsorId="opencreator"
@@ -790,7 +790,7 @@ export function WelcomeScreen({
           <div className="hidden sm:flex items-center gap-2">
             <LocaleSwitcher className="shrink-0" />
             <a
-              href="https://github.com/oil-oil/wolfcha"
+              href="https://github.com/programus/wolfcha"
               target="_blank"
               rel="noopener noreferrer"
               className="hidden sm:flex items-center gap-1.5 rounded-md border-2 border-[var(--border-color)] bg-[var(--bg-card)] px-2 py-1 text-[11px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all group"
@@ -809,7 +809,7 @@ export function WelcomeScreen({
               type="button"
               variant="outline"
               onClick={() => setIsSponsorOpen(true)}
-              className="h-8 text-xs gap-2"
+              className="hidden h-8 text-xs gap-2"
             >
               <Handshake size={16} />
               {t("welcome.sponsor.action")}
@@ -818,7 +818,7 @@ export function WelcomeScreen({
               type="button"
               variant="outline"
               onClick={handleOpenGroup}
-              className="h-8 text-xs gap-2"
+              className="hidden h-8 text-xs gap-2"
             >
               {groupIcon}
               {t("welcome.group.title")}
@@ -852,7 +852,7 @@ export function WelcomeScreen({
               type="button"
               variant="outline"
               onClick={() => setIsSponsorOpen(true)}
-              className="h-8 text-xs gap-2"
+              className="hidden h-8 text-xs gap-2"
             >
               <Handshake size={16} />
               {t("welcome.sponsor.short")}
@@ -861,7 +861,7 @@ export function WelcomeScreen({
               type="button"
               variant="outline"
               onClick={handleOpenGroup}
-              className="h-8 text-xs gap-2"
+              className="hidden h-8 text-xs gap-2"
             >
               {groupIcon}
               {t("welcome.group.short")}
