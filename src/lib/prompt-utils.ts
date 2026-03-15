@@ -817,7 +817,6 @@ alive_count: ${alivePlayers.length}
     const day1Votes = state.badge.history?.[1] ?? {};
     const hasVotes = Object.keys(day1Votes).length > 0;
     context += `\n\n<badge_election>`;
-    context += `\n${t("promptUtils.gameContext.badgeVoteHistoryHeader")}`;
 
     if (hasVotes) {
       const voteGroups: Record<number, number[]> = {};
@@ -828,16 +827,18 @@ alive_count: ${alivePlayers.length}
           voteGroups[targetSeat].push(voter.seat);
         }
       });
-      Object.entries(voteGroups)
-        .sort(([, a], [, b]) => b.length - a.length)
-        .forEach(([target, voters]) => {
-          const targetPlayer = state.players.find(p => p.seat === Number(target));
-          const voterList = voters.map(s => s + 1).join(',');
-          context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: Number(target) + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voters.length}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
-        });
-      if (state.badge.holderSeat === null) {
-        context += `\n${t("promptUtils.gameContext.badgeTorn")}`;
-      }
+      const sortedBadgeGroups = Object.entries(voteGroups)
+        .map(([target, voters]) => ({ target: Number(target), voters }))
+        .sort((a, b) => b.voters.length - a.voters.length);
+      const badgeGroupsText = sortedBadgeGroups.map(({ target, voters }) => {
+        const targetPlayer = state.players.find(p => p.seat === target);
+        const voterStr = voters.map(s => s + 1).join(t("promptUtils.gameContext.voterSepNL"));
+        return t("promptUtils.gameContext.voteGroupNL", { voters: voterStr, target: target + 1, name: targetPlayer?.displayName || '', count: voters.length });
+      }).join(t("promptUtils.gameContext.voteGroupSepNL"));
+      const badgeOutcome = state.badge.holderSeat === null
+        ? t("promptUtils.gameContext.badgeOutcomeTornNL")
+        : (() => { const w = state.players.find(p => p.seat === state.badge.holderSeat); return t("promptUtils.gameContext.badgeOutcomeElectedNL", { seat: (state.badge.holderSeat ?? 0) + 1, name: w?.displayName || '' }); })();
+      context += `\n${t("promptUtils.gameContext.badgeVoteHeaderNL")}${badgeGroupsText} ${badgeOutcome}`;
     } else {
       // auto-elected (only candidate)
       const winner = state.players.find(p => p.seat === state.badge.holderSeat);
@@ -847,44 +848,45 @@ alive_count: ${alivePlayers.length}
   }
 
   if (state.voteHistory && Object.keys(state.voteHistory).length > 0) {
-    // Full per-voter execution vote history for all days (no compression).
-    context += `\n\n<vote_history>\n${t("promptUtils.gameContext.voteHistoryHeader")}`;
-    const sheriffSeat = state.badge.holderSeat;
-    const sheriffPlayer =
-      sheriffSeat !== null ? state.players.find((p) => p.seat === sheriffSeat) : null;
-    const sheriffPlayerId = sheriffPlayer?.playerId;
-
+    context += `\n\n<vote_history>`;
     Object.entries(state.voteHistory)
       .sort(([a], [b]) => Number(a) - Number(b))
-        .forEach(([day, votes]) => {
-          const voteGroups: Record<number, number[]> = {};
-          Object.entries(votes).forEach(([voterId, targetSeat]) => {
-            const voter = state.players.find(p => p.playerId === voterId);
-            if (voter) {
-              if (!voteGroups[targetSeat]) voteGroups[targetSeat] = [];
-              voteGroups[targetSeat].push(voter.seat);
-            }
-          });
-
-          const sortedTargets = Object.entries(voteGroups)
-            .map(([target, voters]) => {
-              const weightedVotes = voters.reduce((sum, seat) => {
-                const voter = state.players.find((p) => p.seat === seat);
-                if (!voter) return sum;
-                return sum + (voter.playerId === sheriffPlayerId ? 1.5 : 1);
-              }, 0);
-              return { target: Number(target), voters, weightedVotes };
-            })
-            .sort((a, b) => b.weightedVotes - a.weightedVotes);
-
-          context += `\nday_${day}:`;
-          sortedTargets.forEach(({ target, voters, weightedVotes }) => {
-            const targetPlayer = state.players.find(p => p.seat === target);
-            const voteLabel = Number.isInteger(weightedVotes) ? `${weightedVotes}` : weightedVotes.toFixed(1);
-            const voterList = voters.map(s => s + 1).join(',');
-            context += `\n  ${t("promptUtils.gameContext.seatLabel", { seat: target + 1 })}${targetPlayer?.displayName || ''}: {${t("promptUtils.gameContext.voteCount")}: ${voteLabel}, ${t("promptUtils.gameContext.voters")}: [${voterList}]}`;
-          });
+      .forEach(([day, votes]) => {
+        const voteGroups: Record<number, number[]> = {};
+        Object.entries(votes).forEach(([voterId, targetSeat]) => {
+          const voter = state.players.find(p => p.playerId === voterId);
+          if (voter) {
+            if (!voteGroups[targetSeat]) voteGroups[targetSeat] = [];
+            voteGroups[targetSeat].push(voter.seat);
+          }
         });
+
+        const sortedTargets = Object.entries(voteGroups)
+          .map(([target, voters]) => ({ target: Number(target), voters }))
+          .sort((a, b) => b.voters.length - a.voters.length);
+
+        const groupsText = sortedTargets.map(({ target, voters }) => {
+          const targetPlayer = state.players.find(p => p.seat === target);
+          const voterStr = voters.map(s => s + 1).join(t("promptUtils.gameContext.voterSepNL"));
+          return t("promptUtils.gameContext.voteGroupNL", { voters: voterStr, target: target + 1, name: targetPlayer?.displayName || '', count: voters.length });
+        }).join(t("promptUtils.gameContext.voteGroupSepNL"));
+
+        const voteData = state.dailySummaryVoteData?.[Number(day)]?.execution_vote;
+        let outcome: string;
+        if (voteData?.eliminated !== undefined) {
+          const elim = state.players.find(p => p.seat === voteData.eliminated);
+          outcome = t("promptUtils.gameContext.voteOutcomeElimNL", { seat: voteData.eliminated + 1, name: elim?.displayName || '' });
+        } else if (sortedTargets.length >= 2 && sortedTargets[0].voters.length === sortedTargets[1].voters.length) {
+          outcome = t("promptUtils.gameContext.voteOutcomeTiedNL");
+        } else if (sortedTargets.length > 0) {
+          const top = sortedTargets[0];
+          const elimPlayer = state.players.find(p => p.seat === top.target);
+          outcome = t("promptUtils.gameContext.voteOutcomeElimNL", { seat: top.target + 1, name: elimPlayer?.displayName || '' });
+        } else {
+          outcome = t("promptUtils.gameContext.voteOutcomeTiedNL");
+        }
+        context += `\n${t("promptUtils.gameContext.voteHistoryDayPrefixNL", { day: Number(day) })}${groupsText} ${outcome}`;
+      });
     context += `\n</vote_history>`;
   }
 
