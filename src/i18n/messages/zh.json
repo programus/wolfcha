@@ -2030,8 +2030,8 @@
       "voteSummaryExecution": "放逐投票：{eliminated}出局，票数：{voteList}",
       "voteSummaryTied": "放逐投票：平票，无人出局",
       "voteSummaryEntry": "{seat}号({count}票)",
-      "nightPeaceful": "昨晚是平安夜，无人死亡",
-      "nightDeath": "昨晚 {seatLabel} {name} 出局",
+      "nightPeaceful": "当晚是平安夜，无人死亡",
+      "nightDeath": "当晚 {seatLabel} {name} 出局",
       "nightHunterShot": "猎人 {hunter} 夜间开枪带走了 {target}"
     },
     "voteFallback": {

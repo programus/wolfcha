@@ -2030,8 +2030,8 @@
       "voteSummaryExecution": "Execution vote: {eliminated} eliminated. Votes: {voteList}",
       "voteSummaryTied": "Execution vote: tie, no one eliminated",
       "voteSummaryEntry": "Seat {seat}({count} votes)",
-      "nightPeaceful": "Last night was peaceful — no one died",
-      "nightDeath": "Last night {seatLabel} {name} was eliminated",
+      "nightPeaceful": "That night was peaceful — no one died",
+      "nightDeath": "That night {seatLabel} {name} was eliminated",
       "nightHunterShot": "Hunter {hunter} fired at night and eliminated {target}"
     },
     "voteFallback": {
