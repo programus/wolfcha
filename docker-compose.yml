@@ -1,0 +1,12 @@
+services:
+  wolfcha-ex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: programus/wolfcha-ex:${TAG:-latest}
+    container_name: wolfcha-ex
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env.docker
+    restart: unless-stopped

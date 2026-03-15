@@ -1,5 +1,5 @@
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -8,7 +8,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* .npmrc* pnpm-workspace.yaml* ./
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \
