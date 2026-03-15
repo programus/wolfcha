@@ -2,6 +2,7 @@
 
 import { NextIntlClientProvider } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { defaultLocale, localeToHtmlLang, type AppLocale } from "./config";
 import { getMessages } from "./messages";
 import { loadLocaleFromStorage, setLocale as setLocaleStore, subscribeLocale } from "./locale-store";
@@ -13,12 +14,13 @@ type I18nProviderProps = {
 export function I18nProvider({ children }: I18nProviderProps) {
   const [locale, setLocale] = useState<AppLocale>(defaultLocale);
   const [isLocaleReady, setIsLocaleReady] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const stored = loadLocaleFromStorage();
     setLocale(stored);
     setIsLocaleReady(true);
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     const unsubscribe = subscribeLocale((next) => setLocale(next));
