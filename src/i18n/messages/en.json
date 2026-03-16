@@ -993,14 +993,15 @@
         "skipped": "{seat}(skipped)"
       },
       "campaign": {
-        "badge": "【Sheriff Badge】\nThe sheriff has 1.5 votes and can transfer the badge upon death. The sheriff leads discussions and consolidates votes.\n\n【Campaign requirements】\n1. Explain why you're running (What info do you have? Why are you fit to lead?)\n2. Provide a leadership commitment (Who to watch, how to vote, how to handle counter-claims)\n3. No empty slogans - give concrete analysis or plans",
+        "badge": "【Sheriff Badge】\nThe sheriff has 1.5 votes and can transfer the badge upon death. The sheriff leads discussions and consolidates votes — but the sheriff's true identity still needs to be judged through their speech logic; holding the badge does not make someone automatically trustworthy.\n\n【Campaign requirements】\n1. Explain why you're running (What info do you have? Why are you fit to lead?)\n2. Provide a leadership commitment (Who to watch, how to vote, how to handle counter-claims)\n3. No empty slogans - give concrete analysis or plans",
         "pk": "【PK requirements】Explain why your opponent is less suitable or why you're the better choice. Include your leadership commitment or focus.",
         "candidateNote": "Note: Only candidates speak in this phase. Non-candidates ({list}) will not speak.",
         "emptyCandidateNote": "Note: Candidate list is empty (unusual). Only respond based on visible speech records; do not speculate about non-speakers."
       },
       "roleHints": {
         "werewolf": "You are a werewolf. Blend in as a villager; deflect suspicion subtly without overdoing it. If you are running for sheriff, in most cases you should hard-claim Seer in your campaign speech — fabricate a check result, announce badge-flow intent, and give a vote direction.",
-        "seer": "You are the Seer. After running for sheriff, almost always reveal your identity immediately. Your campaign speech should include: your check result, a vote commitment (if wolf: name the target; if good: commit to deciding based on today's speeches), and your badge-flow plan (who you check tonight / who gets the badge if you die)."
+        "seer": "You are the Seer. After running for sheriff, almost always reveal your identity immediately. Your campaign speech should include: your check result, a vote commitment (if wolf: name the target; if good: commit to deciding based on today's speeches), and your badge-flow plan (who you check tonight / who gets the badge if you die).",
+        "good": "Reminder: think independently. A sheriff claiming to be the Seer is not automatically trustworthy — the sheriff may be a hard-claiming wolf. Do not follow their vote direction unconditionally; assess it against the table's logic."
       },
       "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n【Scenario】\nThis is an online Werewolf game. Players communicate by text.\n\n{winCondition}\n\n{persona}\n\n{difficultyHint}",
       "task": {
@@ -1691,7 +1692,7 @@
       "witch": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- Use antidote carefully to save key roles or confirmed good\n- Save poison for confirmed wolves or high-risk players\n- Note: witch can self-save and can use only one potion per night",
       "hunter": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- Speak actively and analyze during the day\n- On death, shoot a confirmed wolf\n- Note: if poisoned, you cannot shoot",
       "guard": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- Protect likely wolf targets each night\n- Cannot protect the same player on consecutive nights\n- Infer wolf targets from table info",
-      "villager": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- Listen carefully and analyze behavior during the day\n- Eliminate wolves by voting\n- Coordinate with key roles",
+      "villager": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- Listen carefully and analyze behavior during the day\n- Eliminate wolves by voting\n- Reference info from revealed key roles, but maintain independent judgment; the sheriff's vote direction is only a suggestion — a sheriff claiming Seer could be a hard-claiming wolf",
       "idiot": "【Win condition】Good wins when all werewolves are eliminated\n【Core goals】\n- When voted out, auto-reveal and survive (once)\n- After reveal, lose voting rights but can still speak\n- Killed by wolves or poisoned = normal death",
       "whiteWolfKing": "【Win condition】Werewolves win when their count >= good players\n【Core goals】\n- Coordinate nightly kills with wolf teammates\n- During the day, can self-destruct to take one player (no last words for target)\n- After self-destruct, skip to night phase immediately\n- Seer checks you as Werewolf"
     },

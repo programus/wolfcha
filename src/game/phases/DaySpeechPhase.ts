@@ -191,7 +191,11 @@ export class DaySpeechPhase extends GamePhase {
       : "";
     
     const taskSection = t("prompts.daySpeech.task.section", { taskLine, campaignRequirements: campaignRequirements ? "\n" + campaignRequirements : "" }) + lastWordsStrategy;
-    const roleHintLine = isWolfRole(player.role) ? t("prompts.daySpeech.roleHints.werewolf") : player.role === "Seer" ? t("prompts.daySpeech.roleHints.seer") : "";
+    const roleHintLine = isWolfRole(player.role)
+      ? t("prompts.daySpeech.roleHints.werewolf")
+      : player.role === "Seer"
+        ? t("prompts.daySpeech.roleHints.seer")
+        : t("prompts.daySpeech.roleHints.good");
     const guidelinesSection = isGenshinMode
       ? t("prompts.daySpeech.guidelines.genshin", { maxChars: GAME_CONFIG.HUMAN_SPEECH_MAX_CHARS })
       : t("prompts.daySpeech.guidelines.default", { playerName: player.displayName, roleHintLine, maxChars: GAME_CONFIG.HUMAN_SPEECH_MAX_CHARS });
