@@ -535,11 +535,13 @@ ${checks.join("\n")}
 【昨晚守护】${guardedSeat + 1}号${lastTarget.displayName}
 【守护结果】${protectionResult}
 【今晚限制】不能连续守护 ${guardedSeat + 1}号
+【提示】以上是你的私有信息，用于决定今晚守谁。白天发言时，不要通过分析昨夜结果而间接暴露身份——除非你已决定主动公开。
 </your_guard_info>`;
     } else {
       return `<your_guard_info>
 【首次行动】你之前没有守护过任何人
 【今晚限制】无，可以守护任何存活玩家
+【提示】以上是你的私有信息，用于决定今晚守谁。白天发言时，不要通过分析守护行为而间接暴露身份——除非你已决定主动公开。
 </your_guard_info>`;
     }
   }
@@ -757,18 +759,6 @@ alive_count: ${alivePlayers.length}
     if (!options?.excludePendingDeaths) {
       const currentDayDeaths: string[] = [];
       const nightHistory = state.nightHistory?.[state.day];
-      if (nightHistory?.wolfTarget !== undefined) {
-        const p = state.players.find(p => p.seat === nightHistory.wolfTarget);
-        if (p && !p.alive) {
-          currentDayDeaths.push(`{seat: ${p.seat + 1}, name: ${p.displayName}, cause: ${publicGenericDeathCause}}`);
-        }
-      }
-      if (nightHistory?.witchPoison !== undefined) {
-        const p = state.players.find(p => p.seat === nightHistory.witchPoison);
-        if (p && !p.alive) {
-          currentDayDeaths.push(`{seat: ${p.seat + 1}, name: ${p.displayName}, cause: ${publicGenericDeathCause}}`);
-        }
-      }
       if (nightHistory?.deaths && Array.isArray(nightHistory.deaths)) {
         nightHistory.deaths.forEach(death => {
           if (death && typeof death.seat === 'number') {

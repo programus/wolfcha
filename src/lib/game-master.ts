@@ -23,7 +23,7 @@ import { aiLogger } from "./ai-logger";
 import { getGeneratorModel, getSummaryModel } from "@/lib/api-keys";
 import { PhaseManager } from "@/game/core/PhaseManager";
 import type { PromptResult } from "@/game/core/types";
-import { buildCachedSystemMessageFromParts, buildGameContext, buildTodayTranscript } from "./prompt-utils";
+import { buildCachedSystemMessageFromParts, buildGameContext, buildTodayTranscript, getDayStartIndex } from "./prompt-utils";
 import { getI18n } from "@/i18n/translator";
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -729,17 +729,9 @@ export async function generateDailySummary(
   const { t } = getI18n();
   const startTime = Date.now();
   const summaryModel = getSummaryModel();
-  const dayBreakShort = t("system.dayBreakShort");
   const systemSpeaker = t("speakers.system");
 
-  const dayStartIndex = (() => {
-    for (let i = state.messages.length - 1; i >= 0; i--) {
-      const m = state.messages[i];
-      if (m.isSystem && m.content === dayBreakShort) return i;
-    }
-    return 0;
-  })();
-
+  const dayStartIndex = getDayStartIndex(state);
   const dayMessages = state.messages.slice(dayStartIndex);
   const voteData = extractVoteDataFromDayMessages(dayMessages, state);
   const nightBullets = buildNightResultBullets(state.day, state);

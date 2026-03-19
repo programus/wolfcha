@@ -438,10 +438,11 @@ export function useGameLogic() {
 
   const buildRawDayTranscript = useCallback((state: GameState): string => {
     const aliveIds = new Set(state.players.filter((p) => p.alive).map((p) => p.playerId));
+    const systemMessages = getSystemMessages();
     const dayStartIndex = (() => {
       for (let i = state.messages.length - 1; i >= 0; i--) {
         const m = state.messages[i];
-        if (m.isSystem && m.content === t("gameLogicMessages.dayBreak")) return i;
+        if (m.isSystem && (m.content === systemMessages.dayBreak || m.content === systemMessages.dayBreakShort)) return i;
       }
       return 0;
     })();
@@ -607,6 +608,13 @@ export function useGameLogic() {
 
     if (state.pkSource === "vote") {
       await enterVotePhase(state, token, { isRevote: true });
+      return;
+    }
+
+    // 兜底：pkSource 丢失时，根据警徽状态判断是否为警徽PK
+    if (state.badge.holderSeat === null && (state.badge.candidates?.length ?? 0) > 0) {
+      console.warn("[wolfcha] onPkSpeechEnd: pkSource missing, falling back to badge election revote");
+      await badgePhase.startBadgeElectionPhase(nextState, { isRevote: true });
       return;
     }
   };

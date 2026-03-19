@@ -206,7 +206,18 @@ export function useSpecialEvents(
       },
     };
 
-    // 记录夜晚历史
+    // 计算当晚死亡列表
+    const nightDeaths: Array<{ seat: number; reason: "wolf" | "poison" | "milk" }> = [];
+    if (wolfKillSuccessful && wolfVictimSeat !== undefined) {
+      const isProtected = guardTarget === wolfVictimSeat;
+      const isSaved = witchSave === true;
+      nightDeaths.push({ seat: wolfVictimSeat, reason: isProtected && isSaved ? "milk" : "wolf" });
+    }
+    if (poisonVictimSeat !== undefined) {
+      nightDeaths.push({ seat: poisonVictimSeat, reason: "poison" });
+    }
+
+    // 记录夜晚历史（含 deaths，供摘要生成读取）
     currentState = {
       ...currentState,
       nightHistory: {
@@ -218,6 +229,7 @@ export function useSpecialEvents(
           witchPoison: currentState.nightActions.witchPoison,
           seerTarget: currentState.nightActions.seerTarget,
           seerResult: currentState.nightActions.seerResult,
+          deaths: nightDeaths,
         },
       },
     };

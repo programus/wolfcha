@@ -183,12 +183,22 @@ export class DaySpeechPhase extends GamePhase {
       ? t("prompts.daySpeech.task.lastWords", { seat: player.seat + 1, name: player.displayName }) 
       : isCampaignSpeech 
         ? t("prompts.daySpeech.task.campaign") 
-        : t("prompts.daySpeech.task.dayDiscussion");
+        : t("prompts.daySpeech.task.dayDiscussion", { seat: player.seat + 1, name: player.displayName });
     
-    // Add last words strategy for werewolves
-    const lastWordsStrategy = isLastWords && isWolfRole(player.role) 
-      ? "\n" + t("prompts.daySpeech.task.lastWordsWerewolfStrategy")
-      : "";
+    // Add last words strategy based on role
+    const lastWordsStrategy = isLastWords ? (() => {
+      switch (player.role) {
+        case "Werewolf":      return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.werewolf");
+        case "WhiteWolfKing": return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.whiteWolfKing");
+        case "Seer":          return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.seer");
+        case "Witch":         return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.witch");
+        case "Hunter":        return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.hunter");
+        case "Guard":         return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.guard");
+        case "Villager":      return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.villager");
+        case "Idiot":         return "\n" + t("prompts.daySpeech.task.lastWordsStrategy.idiot");
+        default:              return "";
+      }
+    })() : "";
     
     const taskSection = t("prompts.daySpeech.task.section", { taskLine, campaignRequirements: campaignRequirements ? "\n" + campaignRequirements : "" }) + lastWordsStrategy;
     const roleHintLine = isWolfRole(player.role)
@@ -648,15 +658,14 @@ export class DaySpeechPhase extends GamePhase {
       }
 
       // Check if we've completed a full round of speeches
-      const shouldTransitionToVote = (isDaySpeech && isSheriffAlive && sheriffIsStartSpeaker)
-        ? (nextSeat === sheriffSeat && state.currentSpeakerSeat === sheriffSeat) // Sheriff spoke last after being first
-        : (startSeat !== null && nextSeat === startSeat); // Normal loop detection
+      // DAY_PK_SPEECH 仅由 nextSeat === null 触发结束（由 getNextPkSeat 控制），不依赖循环检测
+      const shouldTransitionToVote = state.phase !== "DAY_PK_SPEECH" && (
+        (isDaySpeech && isSheriffAlive && sheriffIsStartSpeaker)
+          ? (nextSeat === sheriffSeat && state.currentSpeakerSeat === sheriffSeat) // Sheriff spoke last after being first
+          : (startSeat !== null && nextSeat === startSeat) // Normal loop detection
+      );
 
       if (shouldTransitionToVote) {
-        if (state.phase === "DAY_PK_SPEECH") {
-          await runtime.onPkSpeechEnd(state);
-          return;
-        }
         if (state.phase === "DAY_BADGE_SPEECH") {
           await runtime.onBadgeSpeechEnd(state);
           return;

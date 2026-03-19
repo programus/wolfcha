@@ -8,6 +8,7 @@ export const getSystemMessages = (locale?: AppLocale) => {
     nightFall: (day: number) => t("system.nightFall", { day }),
     summarizingDay: t("system.summarizingDay"),
     dayBreak: t("system.dayBreak"),
+    dayBreakShort: t("system.dayBreakShort"),
     guardActionStart: t("system.guardActionStart"),
     wolfActionStart: t("system.wolfActionStart"),
     witchActionStart: t("system.witchActionStart"),
