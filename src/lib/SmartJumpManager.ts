@@ -309,7 +309,7 @@ function analyzeForwardJump(
         if (
           !state.roleAbilities.witchHealUsed &&
           witchSaveExisting === undefined &&
-          (wolfTargetForHeal !== undefined || wolves.length > 0)
+          ((wolfTargetForHeal !== undefined && wolfTargetForHeal >= 0) || (wolfTargetForHeal === undefined && wolves.length > 0))
         ) {
           const { t } = getI18n();
           result.missingTasks.push({
@@ -392,7 +392,7 @@ function createMissingTasksForWitch(state: GameState): MissingTask[] {
     state.nightActions.wolfTarget ?? state.nightHistory?.[state.day]?.wolfTarget;
 
   // 解药：仅当狼刀存在且解药未用时，才需要明确“是否使用解药”
-  if (!state.roleAbilities.witchHealUsed && (wolfTargetForHeal !== undefined || wolves.length > 0)) {
+  if (!state.roleAbilities.witchHealUsed && ((wolfTargetForHeal !== undefined && wolfTargetForHeal >= 0) || (wolfTargetForHeal === undefined && wolves.length > 0))) {
     // 已经明确过是否救人，则无需补全
     if (state.nightActions.witchSave === undefined) {
       const { t } = getI18n();

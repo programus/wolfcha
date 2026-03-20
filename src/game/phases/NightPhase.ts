@@ -62,12 +62,11 @@ export class NightPhase extends GamePhase {
           player,
           (extras.existingVotes as Record<string, number> | undefined) ?? {}
         );
-      case "NIGHT_WITCH_ACTION":
-        return this.buildWitchPrompt(
-          state,
-          player,
-          extras.wolfTarget as number | undefined
-        );
+      case "NIGHT_WITCH_ACTION": {
+        const rawWt = extras.wolfTarget as number | undefined;
+        const filteredWt = (rawWt !== undefined && rawWt >= 0) ? rawWt : undefined;
+        return this.buildWitchPrompt(state, player, filteredWt);
+      }
       case "NIGHT_SEER_ACTION":
         return this.buildSeerPrompt(state, player);
       default:
@@ -218,25 +217,30 @@ export class NightPhase extends GamePhase {
         await runtime.waitForUnpause();
         if (!runtime.isTokenValid(runtime.token)) return currentState;
         
-        // 所有狼人投票给同一个目标
-        for (const wolf of wolves) {
-          wolfVotes[wolf.playerId] = targetSeat;
-        }
+        if (targetSeat === -1) {
+          // Blank knife — wolves chose not to kill
+          currentState = {
+            ...currentState,
+            nightActions: { ...currentState.nightActions, wolfTarget: -1 },
+          };
+        } else {
+          // 所有狼人投票给同一个目标
+          for (const wolf of wolves) {
+            wolfVotes[wolf.playerId] = targetSeat;
+          }
 
-        currentState = {
-          ...currentState,
-          nightActions: { ...currentState.nightActions, wolfVotes, wolfTarget: targetSeat },
-        };
+          currentState = {
+            ...currentState,
+            nightActions: { ...currentState.nightActions, wolfVotes, wolfTarget: targetSeat },
+          };
+        }
         runtime.setGameState(currentState);
       } catch (error) {
         console.error("[wolfcha] AI wolf vote failed:", error);
-        const villagers = currentState.players.filter((p) => p.alive && p.alignment === "village");
-        const fallbackSeat = villagers.length > 0
-          ? villagers[Math.floor(Math.random() * villagers.length)].seat
-          : 0;
+        // On error, default to blank knife rather than random kill
         currentState = {
           ...currentState,
-          nightActions: { ...currentState.nightActions, wolfVotes, wolfTarget: fallbackSeat },
+          nightActions: { ...currentState.nightActions, wolfTarget: -1 },
         };
         runtime.setGameState(currentState);
       }
@@ -281,7 +285,9 @@ export class NightPhase extends GamePhase {
       return currentState;
     }
 
-    const witchAction = await generateWitchAction(currentState, witch, currentState.nightActions.wolfTarget);
+    const witchWolfTarget = currentState.nightActions.wolfTarget;
+    const wolfTargetForWitch = (witchWolfTarget !== undefined && witchWolfTarget >= 0) ? witchWolfTarget : undefined;
+    const witchAction = await generateWitchAction(currentState, witch, wolfTargetForWitch);
     await runtime.waitForUnpause();
 
     if (!runtime.isTokenValid(runtime.token)) return currentState;

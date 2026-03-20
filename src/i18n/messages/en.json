@@ -644,6 +644,8 @@
     "poisonUsed": "Poison used up",
     "clickToPoison": "Tap a player card to choose a poison target",
     "pass": "Pass",
+    "guardSkip": "Don't protect anyone",
+    "wolfBlankKnife": "Blank knife (no kill)",
     "gameEnd": {
       "villageWin": "Villagers win!",
       "wolfWin": "Werewolves win!"
@@ -929,6 +931,8 @@
     "witchSave": "You used the antidote.",
     "witchPoison": "You poisoned Seat {seat} {name}.",
     "guardProtect": "You protected Seat {seat} {name}.",
+    "guardSkip": "Guard chooses not to protect anyone tonight.",
+    "wolfBlankKnife": "Werewolves choose to go blank knife tonight.",
     "hunterShoot": "Hunter Seat {hunterSeat} shot Seat {targetSeat} {targetName}.",
     "whiteWolfKingBoom": "Seat {seat} White Wolf King self-destructed and took Seat {targetSeat} {targetName}.",
     "whiteWolfKingBoomNoTarget": "Seat {seat} White Wolf King self-destructed without taking anyone.",
@@ -1061,14 +1065,14 @@
         "rules": "{winCondition}\n\n{difficultyHint}",
         "teammateVotes": "【Teammate intent】\n{lines}\nHint: focus fire with teammates!",
         "voteLine": "- Seat {seat} ({name}) wants to kill: Seat {targetSeat}{targetName}",
-        "task": "【Werewolf Skill】\nEach night wolves collectively decide to kill one player. Can kill good players, teammates (self-kill), or skip (no kill).\n\n【Kill Strategy】\n- Priority: Seer > Witch > Hunter > Guard\n- Self-kill: the chosen wolf dies, creates confusion\n- No kill: creates peaceful night to confuse good players\n\n【Task】\nChoose one player to kill. Only output the seat number.\n{teammateVotesSection}\n\nOptions: {options}\n",
-        "user": "{context}\n\nWhich seat do you want to kill?\n\n【Format】\nReply with a seat number only, e.g., 2\nNo explanations, no extra text, no code blocks"
+        "task": "【Werewolf Skill】\nEach night wolves collectively decide to kill one player.\n\n【Default Rule: Always Kill】\nBlank knife is an advanced tactic, not a way to avoid choosing a target. Without a clear strategic signal, you MUST kill someone.\n\n【Kill Priority】\n- Special roles first: Seer > Witch > Hunter > Guard\n- Then: good players with low suspicion who threaten the wolf team\n\n【Only consider blank knife in these specific situations】\n1. Impersonate the Guard: you killed the guard last night → blank knife tonight to fake \"guard still alive\", then have a teammate pose as the guard\n2. Neutralize witch self-verification: witch is using poison to verify themselves (double-kill self-proof) → blank knife tonight to invalidate her plan\n3. Endgame edge: only 2 gods + 2 villagers + 1 wolf remain → blank knife gives one extra cover position in today's vote\n\n【Task】\nChoose one player to kill. Only output the seat number.\n{teammateVotesSection}\n\nOptions: {options}\n",
+        "user": "{context}\n\nWhich seat do you want to kill?\n\n【Format】\nReply with a seat number only, e.g., 2\nDo NOT reply pass unless one of the blank knife conditions above clearly applies\nNo explanations, no extra text, no code blocks"
       },
       "guard": {
         "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n{winCondition}\n\n{difficultyHint}",
         "lastTarget": "You protected Seat {seat} last night; cannot pick again",
         "task": "【Guard Skill】\nEach night you can protect one player from wolf kills. If successful, the target survives.\n\n【Important Rules】\n- Cannot protect the same player on consecutive nights\n- Can protect yourself\n- If guard and witch both save the same target (milk poison), they still die\n\n【Guard Strategy】\n- Prioritize protecting revealed roles (Seer, Witch)\n- Also consider strong-speaking good players\n\n【Task】\nChoose one player to protect. Only output the seat number.\n\nOptions: {options}\n{lastTargetLine}",
-        "user": "{context}\n\nWhich seat do you want to protect?\n\n【Format】\nReply with a seat number only, e.g., 3\nNo explanations, no extra text, no code blocks"
+        "user": "{context}\n\nWhich seat do you want to protect?\n\n【Format】\nReply with a seat number only, e.g., 3\nIf you choose not to guard anyone, reply: pass\nNo explanations, no extra text, no code blocks"
       },
       "witch": {
         "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n{winCondition}\n\n{difficultyHint}",

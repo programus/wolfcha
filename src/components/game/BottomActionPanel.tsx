@@ -179,7 +179,7 @@ export function BottomActionPanel({
               exit={{ opacity: 0, y: -10 }}
               className="wc-witch-action-row flex items-center gap-2 w-full"
             > 
-              {gameState.nightActions.wolfTarget !== undefined && (
+              {gameState.nightActions.wolfTarget !== undefined && gameState.nightActions.wolfTarget >= 0 && (
                 <button 
                   onClick={() => onNightAction(gameState.nightActions.wolfTarget!, "save")}
                   disabled={gameState.roleAbilities.witchHealUsed}
@@ -209,6 +209,44 @@ export function BottomActionPanel({
               </button>
             </motion.div>
           )
+        )}
+
+        {/* 守卫跳过保护 */}
+        {phase === "NIGHT_GUARD_ACTION" && humanPlayer?.role === "Guard" && humanPlayer?.alive && !isWaitingForAI && selectedSeat === null && (
+          <motion.div
+            key="guard-skip"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="wc-bottom-action-row flex gap-2 w-full items-center"
+          >
+            <button
+              onClick={() => onNightAction(-1)}
+              className={`inline-flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-sm cursor-pointer active:scale-[0.98] transition-all duration-150 flex-1 ${neutralButtonClass}`}
+            >
+              <X size={16} />
+              {t("bottomAction.guardSkip")}
+            </button>
+          </motion.div>
+        )}
+
+        {/* 狼人空刀 */}
+        {phase === "NIGHT_WOLF_ACTION" && humanPlayer && isWolfRole(humanPlayer.role) && humanPlayer?.alive && !isWaitingForAI && selectedSeat === null && (
+          <motion.div
+            key="wolf-blank-knife"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="wc-bottom-action-row flex gap-2 w-full items-center"
+          >
+            <button
+              onClick={() => onNightAction(-1)}
+              className={`inline-flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-sm cursor-pointer active:scale-[0.98] transition-all duration-150 flex-1 ${neutralButtonClass}`}
+            >
+              <X size={16} />
+              {t("bottomAction.wolfBlankKnife")}
+            </button>
+          </motion.div>
         )}
 
         {/* 猎人弃枪 */}

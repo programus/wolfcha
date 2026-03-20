@@ -745,7 +745,10 @@ export function useGameLogic() {
     if (isAwaitingRoleRevealRef.current) return;
 
     const systemMessages = getSystemMessages();
-    const lastGuardTarget = state.nightActions.guardTarget ?? state.nightActions.lastGuardTarget;
+    const rawGuardTarget = state.nightActions.guardTarget;
+    const lastGuardTarget = (rawGuardTarget !== undefined && rawGuardTarget >= 0)
+      ? rawGuardTarget
+      : state.nightActions.lastGuardTarget;
     // Preserve seerHistory across nights
     const seerHistory = state.nightActions.seerHistory;
     let nextState = {
@@ -1878,6 +1881,19 @@ export function useGameLogic() {
 
     // 守卫保护
     if (gameState.phase === "NIGHT_GUARD_ACTION" && humanPlayer.role === "Guard") {
+      if (targetSeat === -1) {
+        // 守卫选择本夜不守护任何人
+        currentState = {
+          ...currentState,
+          nightActions: { ...currentState.nightActions, guardTarget: -1 },
+        };
+        setDialogue(t("speakers.system"), t("system.guardSkip"), false);
+        setGameState(currentState);
+        await delay(1000);
+        await waitForUnpause();
+        await runNightPhaseAction(currentState, token, "CONTINUE_NIGHT_AFTER_GUARD");
+        return;
+      }
       if (currentState.nightActions.lastGuardTarget === targetSeat) {
         toast.error(t("gameLogicMessages.guardNoRepeat"));
         return;
@@ -1896,6 +1912,19 @@ export function useGameLogic() {
     }
     // 狼人击杀
     else if (gameState.phase === "NIGHT_WOLF_ACTION" && isWolfRole(humanPlayer.role)) {
+      if (targetSeat === -1) {
+        // 狼人选择空刀
+        currentState = {
+          ...currentState,
+          nightActions: { ...currentState.nightActions, wolfTarget: -1 },
+        };
+        setDialogue(t("speakers.system"), t("system.wolfBlankKnife"), false);
+        setGameState(currentState);
+        await delay(800);
+        await waitForUnpause();
+        await runNightPhaseAction(currentState, token, "CONTINUE_NIGHT_AFTER_WOLF");
+        return;
+      }
       const targetPlayer = currentState.players.find((p) => p.seat === targetSeat);
       const wolves = currentState.players.filter((p) => isWolfRole(p.role) && p.alive);
       

@@ -179,8 +179,8 @@ export function useSpecialEvents(
     let poisonVictimSeat: number | undefined;
 
     // 狼人击杀判定
-    if (wolfTarget !== undefined) {
-      const isProtected = guardTarget === wolfTarget;
+    if (wolfTarget !== undefined && wolfTarget >= 0) {
+      const isProtected = guardTarget !== undefined && guardTarget >= 0 && guardTarget === wolfTarget;
       const isSaved = witchSave === true;
 
       // If both guard and witch save are applied, the victim still dies (milk/guard overlap).
@@ -200,7 +200,7 @@ export function useSpecialEvents(
       ...currentState,
       nightActions: {
         ...currentState.nightActions,
-        lastGuardTarget: guardTarget,
+        lastGuardTarget: (guardTarget !== undefined && guardTarget >= 0) ? guardTarget : undefined,
         pendingWolfVictim: wolfKillSuccessful ? wolfVictimSeat : undefined,
         pendingPoisonVictim: poisonVictimSeat,
       },

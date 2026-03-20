@@ -644,6 +644,8 @@
     "poisonUsed": "毒药已耗尽",
     "clickToPoison": "点击玩家卡片选择毒杀目标",
     "pass": "跳过",
+    "guardSkip": "不守护任何人",
+    "wolfBlankKnife": "空刀（不击杀）",
     "gameEnd": {
       "villageWin": "好人阵营胜利！",
       "wolfWin": "狼人阵营胜利！"
@@ -929,6 +931,8 @@
     "witchSave": "你使用了解药",
     "witchPoison": "你对 {seat}号 {name} 使用了毒药",
     "guardProtect": "你守护了 {seat}号 {name}",
+    "guardSkip": "守卫选择本夜不守护任何人",
+    "wolfBlankKnife": "狼人选择本夜空刀",
     "hunterShoot": "{hunterSeat}号猎人开枪带走了 {targetSeat}号 {targetName}",
     "whiteWolfKingBoom": "{seat}号白狼王自爆，带走了 {targetSeat}号 {targetName}",
     "whiteWolfKingBoomNoTarget": "{seat}号白狼王自爆，没有带走任何人",
@@ -1061,14 +1065,14 @@
         "rules": "{winCondition}\n\n{difficultyHint}",
         "teammateVotes": "【队友意向】\n{lines}\n提示：建议跟随队友集火同一目标！",
         "voteLine": "- {seat}号({name}) 想杀: {targetSeat}号{targetName}",
-        "task": "【狼人技能】\n每晚狼人集体决定击杀一名玩家。可以选择击杀好人、队友（自刀）或不选（空刀）。\n\n【击杀策略】\n- 优先击杀神职：预言家 > 女巫 > 猎人 > 守卫\n- 自刀：选择的狼人会死亡，可制造混乱\n- 空刀：不杀人，制造平安夜迷惑好人\n\n【任务】\n选择一名玩家击杀。只需给出座位数字。\n{teammateVotesSection}\n\n可选: {options}\n",
-        "user": "{context}\n\n你们要杀几号？\n\n【格式】\n只回复座位数字，如: 2\n不要解释，不要输出多余文字，不要代码块"
+        "task": "【狼人技能】\n每晚狼人集体决定击杀一名玩家。\n\n【默认原则：必须刀人】\n空刀是高级战术，不是逃避选择的借口。没有明显可用信号时，必须选择刀人。\n\n【击杀优先级】\n- 神职优先：预言家 > 女巫 > 猎人 > 守卫\n- 其次：嫌疑低但对狼队威胁较大的好人\n\n【仅在以下情况才考虑空刀】\n1. 穿守卫衣服：上一晚已刀掉守卫，今晚空刀制造「守卫还活着」的假象，配合队友冒守卫\n2. 反制女巫自证：女巫企图用毒自证（双死自证）当晚选择空刀，让她的计划落空\n3. 场末优势：场上仅剩 2神2民1狼的末局，空刀可多一个白天抗推位\n\n【任务】\n选择一名玩家击杀。只需给出座位数字。\n{teammateVotesSection}\n\n可选: {options}\n",
+        "user": "{context}\n\n你们要杀几号？\n\n【格式】\n只回复座位数字，如: 2\n除非符合上述空刀条件，否则不得回复 pass\n不要解释，不要输出多余文字，不要代码块"
       },
       "guard": {
         "base": "【身份】\n你是 {seat}号「{name}」\n身份: {role}\n\n{winCondition}\n\n{difficultyHint}",
         "lastTarget": "上晚保护了{seat}号，今晚不能选",
         "task": "【守卫技能】\n每晚可保护一名玩家不被狼人杀害。守护成功则刀口存活。\n\n【重要规则】\n- 不能连续两晚保护同一人\n- 可以保护自己\n- 若守卫和女巫同时救同一人（毒奶），该玩家仍会死亡\n\n【守护策略】\n- 优先保护跳出的神职（预言家、女巫等）\n- 也可保护发言强势的好人\n\n【任务】\n选择一名玩家保护。只需给出座位数字。\n\n可选: {options}\n{lastTargetLine}",
-        "user": "{context}\n\n你要保护几号？\n\n【格式】\n只回复座位数字，如: 3\n不要解释，不要输出多余文字，不要代码块"
+        "user": "{context}\n\n你要保护几号？\n\n【格式】\n只回复座位数字，如: 3\n如果选择不守护任何人，回复: pass\n不要解释，不要输出多余文字，不要代码块"
       },
       "witch": {
         "base": "【身份】\n你是 {seat}号「{name}」\n身份: {role}\n\n{winCondition}\n\n{difficultyHint}",

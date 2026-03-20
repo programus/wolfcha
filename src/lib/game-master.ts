@@ -1835,19 +1835,22 @@ export async function generateWolfAction(
 
   const rawContent = result.content;
   const cleanedWolf = stripMarkdownCodeFences(rawContent);
+  const wolfContentLower = cleanedWolf.toLowerCase().trim();
 
-  const match = cleanedWolf.match(/\d+/);
   let parsedSeat: number;
-  if (match) {
-    const seat = parseInt(match[0]) - 1;
-    const validSeats = alivePlayers.map((p) => p.seat);
-    if (validSeats.includes(seat)) {
-      parsedSeat = seat;
-    } else {
-      parsedSeat = alivePlayers[Math.floor(Math.random() * alivePlayers.length)].seat;
-    }
+  if (wolfContentLower.includes("pass") || wolfContentLower.includes("空刀")) {
+    // Blank knife — wolves choose not to kill
+    parsedSeat = -1;
   } else {
-    parsedSeat = alivePlayers[Math.floor(Math.random() * alivePlayers.length)].seat;
+    const match = cleanedWolf.match(/\d+/);
+    if (match) {
+      const seat = parseInt(match[0]) - 1;
+      const validSeats = alivePlayers.map((p) => p.seat);
+      parsedSeat = validSeats.includes(seat) ? seat : -1;
+    } else {
+      // No clear instruction — treat as blank knife
+      parsedSeat = -1;
+    }
   }
 
   await aiLogger.log({
@@ -1971,19 +1974,22 @@ export async function generateGuardAction(
   }));
 
   const cleanedGuard = stripMarkdownCodeFences(result.content);
+  const guardContentLower = cleanedGuard.toLowerCase().trim();
 
-  const match = cleanedGuard.match(/\d+/);
   let parsedSeat: number;
-  if (match) {
-    const seat = parseInt(match[0]) - 1;
-    const validSeats = alivePlayers.map((p) => p.seat);
-    if (validSeats.includes(seat)) {
-      parsedSeat = seat;
-    } else {
-      parsedSeat = alivePlayers[Math.floor(Math.random() * alivePlayers.length)].seat;
-    }
+  if (guardContentLower.includes("pass") || guardContentLower.includes("不守")) {
+    // Guard chooses not to protect anyone
+    parsedSeat = -1;
   } else {
-    parsedSeat = alivePlayers[Math.floor(Math.random() * alivePlayers.length)].seat;
+    const match = cleanedGuard.match(/\d+/);
+    if (match) {
+      const seat = parseInt(match[0]) - 1;
+      const validSeats = alivePlayers.map((p) => p.seat);
+      parsedSeat = validSeats.includes(seat) ? seat : -1;
+    } else {
+      // No clear instruction — treat as skip
+      parsedSeat = -1;
+    }
   }
 
   await aiLogger.log({
