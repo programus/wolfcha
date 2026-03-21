@@ -1520,7 +1520,13 @@
     "targetSummary": "Target summary:",
     "votes": "{count} votes",
     "consensus": "Wolves have reached consensus!",
-    "hint": "Tap a player avatar to choose a kill target"
+    "hint": "Tap a player avatar to choose a kill target",
+    "consultButton": "Ask teammates for advice",
+    "consultNoTeammate": "(No AI teammates available to consult)",
+    "consultingLabel": "Teammates are discussing…",
+    "consultRecommend": "Teammates suggest: Seat {seat} {name}",
+    "consultAborted": "(Suggestion dismissed)",
+    "consultDiscussion": "Wolf team internal discussion"
   },
   "dayPhase": {
     "organizing": "(Gathering thoughts...)",
@@ -1844,6 +1850,9 @@
         "idiot": "Idiot: good team; immune to the first vote-out (reveals role, stays alive, then permanently loses voting rights); dies normally if killed by wolves or Witch's poison.",
         "villager": "Villager: good team; no special ability; wins by analyzing speeches and voting to eliminate all werewolves."
       }
+    },
+    "situationalStrategy": {
+      "wolfBadgeCampaign": "<situational_tips>\n【Badge Campaign Coordination】Wolf teammate(s) among the candidates: {teammates}\nBefore speaking, check the transcript of earlier speeches to see if any wolf teammate has already claimed Seer:\n- If a wolf teammate has already claimed Seer → strongly avoid also claiming Seer. Two candidates claiming the same role signals a wolf pocket and severely damages both your credibility. Run as Villager, Hunter, or any other role (not Seer).\n- If no wolf teammate has claimed Seer yet (or you are the first candidate to speak) → decide normally whether to hard-claim Seer per your usual strategy.\n- If despite a teammate already claiming Seer you still choose to claim it → make sure your check route, badge-transfer plan, and other details differ noticeably from your teammate's story to avoid being exposed by overlapping accounts.\n</situational_tips>"
     }
   },
   "devConsole": {
@@ -2031,6 +2040,11 @@
   "gameMaster": {
     "invalidSeat": "(invalid seat)",
     "tooManyRequests": "Too many requests, please try again later.",
+    "wolfConsultation": {
+      "systemPrompt": "You are the wolf team's internal strategist in a Werewolf game, facilitating the nightly kill decision.\nYou will see all surviving wolves' identities and personalities, plus the current game state.\n\nYour task:\n1. Briefly simulate each wolf's preference and reasoning in an 'internal discussion' format (1-2 sentences per wolf)\n2. Synthesize the discussion into the optimal kill target for tonight\n3. After your reasoning, output the final decision in strict format\n\n[Kill Priority (for reference)]\n- Roles first: Seer > Witch > Hunter > Guard\n- Then: low-suspicion good players who threaten the wolf team\n\n[Only consider blank knife in these situations]\n1. Fake guard: killed the guard last night → blank knife tonight to fake 'guard still alive'\n2. Counter witch self-verify: witch attempts double-death self-proof → blank knife ruins the plan\n3. Endgame edge: only 2 gods + 2 villagers + 1 wolf → blank knife for extra day cover\n\n[Output Format]\nFree-form reasoning, then the LAST LINE must strictly be one of:\nDECISION: {\"target\": seat_number}\nor for blank knife:\nDECISION: {\"target\": \"pass\"}",
+      "userPrompt": "[Current State]\n{context}\n\n[Surviving Wolf Team]\n{wolfList}\n\n[Valid Kill Targets (seat numbers)]\n{options}\n\nFacilitate tonight's kill decision, then output the DECISION line.",
+      "wolfLine": "- Seat {seat} {name} ({personality})"
+    },
     "badgeSignup": {
       "systemPrompt": "Werewolf game assistant. Decide if each player runs for sheriff based on their role, personality, and any night-action context.\n\n【Randomness Requirements】\n- Do NOT treat any single choice as a \"fixed answer\". When outcomes are close, allow a 30%-40% chance to choose differently (signup / no-signup), while still respecting your team's goals.\n- More aggressive / confrontational personalities should be more likely to sign up; more cautious / responsibility-averse personalities should be more likely to stay off.\n\n【Signup Strategy (soft guidance, not hard rules)】\n- Seer:\n  - First check is wolf: in most cases (~60%-80%) sign up and claim to lead; in a minority of cases (~20%-40%) stay hidden first and reveal after hearing speeches or at a more critical timing.\n  - First check is good: more often observe first (~60%-80% no-signup), but aggressive personalities may still sign up for speaking power.\n- Witch/Hunter: usually no-signup (~70%-90%), but strong personalities can occasionally sign up.\n- Guard: almost never signs up (~5%-15%); keeping identity hidden is far more valuable than sheriff speaking power.\n- Villager: may sign up for speaking power (~10%-35%), not required.\n- Werewolf: sometimes fight for narrative control (e.g. in ~40%-70% of games, at least 1 wolf signs up), but it is also acceptable for all wolves to stay off this game; occasionally 2 wolves may sign up to create more noise.\n\n【Balance】\n- Usually 1-4 signups are normal. Do NOT sign up just to \"hit a number\".\n\nIMPORTANT: Return ONLY simple JSON:\n{\"seat_number\": true or false, ...}\n\nExample: {\"2\": true, \"3\": false, \"4\": true}\n\nNo other fields (no player_name, reason, etc). Only seat numbers and booleans.",
       "userPrompt": "Players:\n{playerDescriptions}\n\nSeats: {seatList}\n\nReturn only JSON: {\"seat\": true/false, ...}",

@@ -1,18 +1,23 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Skull, HourglassSimple, CheckCircle, Target } from "@phosphor-icons/react";
+import { Skull, HourglassSimple, CheckCircle, Target, Users, SpinnerGap } from "@phosphor-icons/react";
 import { WerewolfIcon } from "@/components/icons/FlatIcons";
 import type { GameState, Player } from "@/types/game";
 import { isWolfRole } from "@/types/game";
 import { useTranslations } from "next-intl";
+import type { WolfConsultStatus } from "@/hooks/useGameLogic";
 
 interface WolfPlanningPanelProps {
   gameState: GameState;
   humanPlayer: Player | null;
+  consultStatus?: WolfConsultStatus;
+  consultText?: string;
+  consultTarget?: number | null;
+  onConsultRequest?: () => void;
 }
 
-export function WolfPlanningPanel({ gameState, humanPlayer }: WolfPlanningPanelProps) {
+export function WolfPlanningPanel({ gameState, humanPlayer, consultStatus = "idle", consultText = "", consultTarget = null, onConsultRequest }: WolfPlanningPanelProps) {
   const t = useTranslations();
   const wolves = gameState.players.filter(p => isWolfRole(p.role) && p.alive);
   const wolfVotes = gameState.nightActions.wolfVotes || {};
@@ -136,6 +141,74 @@ export function WolfPlanningPanel({ gameState, humanPlayer }: WolfPlanningPanelP
         <div className="mt-3 text-xs text-yellow-400 flex items-center gap-1">
           <Target size={12} />
           {t("wolfPlanning.hint")}
+        </div>
+      )}
+
+      {/* 听取AI队友意见区域 */}
+      {humanPlayer && isWolfRole(humanPlayer.role) && onConsultRequest && (
+        <div className="mt-3 border-t border-[#3e2723] pt-3">
+          {/* 空闲：显示按钮 */}
+          {consultStatus === "idle" && (() => {
+            const aiWolves = wolves.filter(w => !w.isHuman);
+            const hasAiTeammates = aiWolves.length > 0;
+            return (
+              <button
+                type="button"
+                onClick={hasAiTeammates ? onConsultRequest : undefined}
+                disabled={!hasAiTeammates}
+                className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded text-xs font-semibold transition-colors ${
+                  hasAiTeammates
+                    ? "bg-[#3e2723] hover:bg-[#5a3825] text-[#f0c070] cursor-pointer"
+                    : "bg-[#2a201a] text-[#6a5a4a] cursor-not-allowed"
+                }`}
+              >
+                <Users size={14} />
+                {hasAiTeammates ? t("wolfPlanning.consultButton") : t("wolfPlanning.consultNoTeammate")}
+              </button>
+            );
+          })()}
+
+          {/* 讨论中：流式文字 */}
+          {(consultStatus === "consulting" || consultStatus === "done") && (
+            <div>
+              <div className="flex items-center gap-1 text-xs text-[#a09080] mb-1">
+                {consultStatus === "consulting" ? (
+                  <>
+                    <SpinnerGap size={12} className="animate-spin" />
+                    {t("wolfPlanning.consultingLabel")}
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={12} weight="fill" className="text-green-400" />
+                    {t("wolfPlanning.consultDiscussion")}
+                  </>
+                )}
+              </div>
+              <div className="max-h-32 overflow-y-auto text-[11px] text-[#c8b89a] bg-[#12100e] rounded p-2 whitespace-pre-wrap leading-relaxed">
+                {consultText || "…"}
+              </div>
+              {consultStatus === "done" && consultTarget !== null && (() => {
+                const rec = gameState.players.find((p) => p.seat === consultTarget);
+                return rec ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-2 flex items-center gap-2 p-2 rounded bg-[var(--color-wolf)]/20 border border-[var(--color-wolf)]/50 text-xs"
+                  >
+                    <Target size={12} className="text-[var(--color-danger)] shrink-0" />
+                    <span className="text-[#f0e6d2]">
+                      {t("wolfPlanning.consultRecommend", { seat: rec.seat + 1, name: rec.displayName })}
+                    </span>
+                  </motion.div>
+                ) : null;
+              })()}
+            </div>
+          )}
+
+          {/* 已放弃 */}
+          {consultStatus === "aborted" && (
+            <div className="text-xs text-[#a09080] italic">{t("wolfPlanning.consultAborted")}</div>
+          )}
         </div>
       )}
     </div>

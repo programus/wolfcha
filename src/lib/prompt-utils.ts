@@ -140,6 +140,22 @@ export const buildSituationalStrategy = (state: GameState, player: Player): stri
     lines.push("</situational_tips>");
   }
   
+  // Badge speech: if multiple wolf teammates are candidates, warn not to duplicate-claim Seer
+  if (isWolfRole(player.role) && state.phase === "DAY_BADGE_SPEECH") {
+    const { t } = getI18n();
+    const candidates = Array.isArray(state.badge?.candidates) ? state.badge.candidates : [];
+    const wolfTeammatesInCandidates = state.players.filter(
+      p => isWolfRole(p.role) && p.alive && p.playerId !== player.playerId && candidates.includes(p.seat)
+    );
+    if (wolfTeammatesInCandidates.length > 0) {
+      const separator = t("promptUtils.gameContext.listSeparator");
+      const teammateList = wolfTeammatesInCandidates
+        .map(p => t("promptUtils.gameContext.seatLabel", { seat: p.seat + 1 }))
+        .join(separator);
+      lines.push(t("promptUtils.situationalStrategy.wolfBadgeCampaign", { teammates: teammateList }));
+    }
+  }
+
   if (player.role === "Witch") {
     const hasHeal = !state.roleAbilities.witchHealUsed;
     const hasPoison = !state.roleAbilities.witchPoisonUsed;

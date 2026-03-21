@@ -15,6 +15,7 @@ import {
   generateSeerAction,
   generateWitchAction,
   generateWolfAction,
+  generateWolfConsultationStream,
   transitionPhase as rawTransitionPhase,
 } from "@/lib/game-master";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
@@ -203,20 +204,15 @@ export class NightPhase extends GamePhase {
 
       let wolfVotes: Record<string, number> = {};
       try {
-        // 简化逻辑：第一个狼人决定目标，其他狼人自动达成共识
-        const firstWolf = wolves[0];
-        // Defensive: firstWolf is guaranteed alive by the filter above, but guard
-        // explicitly to prevent calling the API for a dead AI player.
-        if (!firstWolf.alive) {
-          runtime.setIsWaitingForAI(false);
-          await playNarrator("wolfClose");
-          return currentState;
-        }
-        const targetSeat = await generateWolfAction(currentState, firstWolf, {});
-        
+        // 狼人协商：一次 AI 调用内部模拟所有狼人的开议过程并输出目标
+        const consultStream = generateWolfConsultationStream(currentState, wolves);
+        // Drain the stream (we don't display it in the all-AI path, but we need parsedTarget)
+        for await (const _ of consultStream) { /* consume */ }
+        const targetSeat = consultStream.parsedTarget;
+
         await runtime.waitForUnpause();
         if (!runtime.isTokenValid(runtime.token)) return currentState;
-        
+
         if (targetSeat === -1) {
           // Blank knife — wolves chose not to kill
           currentState = {
@@ -224,11 +220,10 @@ export class NightPhase extends GamePhase {
             nightActions: { ...currentState.nightActions, wolfTarget: -1 },
           };
         } else {
-          // 所有狼人投票给同一个目标
+          // 所有狼人设为相同目标
           for (const wolf of wolves) {
             wolfVotes[wolf.playerId] = targetSeat;
           }
-
           currentState = {
             ...currentState,
             nightActions: { ...currentState.nightActions, wolfVotes, wolfTarget: targetSeat },
@@ -236,7 +231,7 @@ export class NightPhase extends GamePhase {
         }
         runtime.setGameState(currentState);
       } catch (error) {
-        console.error("[wolfcha] AI wolf vote failed:", error);
+        console.error("[wolfcha] AI wolf consultation failed:", error);
         // On error, default to blank knife rather than random kill
         currentState = {
           ...currentState,

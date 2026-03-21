@@ -35,6 +35,7 @@ import {
   getNextAliveSeat,
   generateWhiteWolfKingBoomDecision,
   generateAISpeechDirection,
+  generateWolfConsultationStream,
 } from "@/lib/game-master";
 import { buildGenshinModelRefs, generateCharacters, generateGenshinModeCharacters, sampleModelRefs, type GeneratedCharacter } from "@/lib/character-generator";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
@@ -74,6 +75,8 @@ function getRandomModelRef(): ModelRef {
 // Re-export for backward compatibility
 export type { DialogueState };
 
+export type WolfConsultStatus = "idle" | "consulting" | "done" | "aborted";
+
 export function useGameLogic() {
   const t = useTranslations();
   const speakerHost = t("speakers.host");
@@ -89,6 +92,14 @@ export function useGameLogic() {
   const [isLoading, setIsLoading] = useState(false);
   const [inputText, setInputText] = useState("");
   const [showTable, setShowTable] = useState(false);
+
+  // Wolf consultation state (human wolf in NIGHT_WOLF_ACTION)
+  const [wolfConsultStatus, setWolfConsultStatus] = useState<WolfConsultStatus>("idle");
+  const [wolfConsultText, setWolfConsultText] = useState("");
+  const [wolfConsultTarget, setWolfConsultTarget] = useState<number | null>(null);
+  const wolfConsultAbortRef = useRef(false);
+  const prevPhaseForConsultRef = useRef<string>("");
+
   const logRef = useRef<HTMLDivElement>(null);
   
   // Track if we've already restored the game state on mount
@@ -1166,6 +1177,18 @@ export function useGameLogic() {
     }
   }, [gameState.phase, gameState.votes, gameState.players, getToken, resolveVotesSafely, isWaitingForAI]);
 
+  // Reset wolf consultation state each time NIGHT_WOLF_ACTION is entered
+  useEffect(() => {
+    if (gameState.phase === "NIGHT_WOLF_ACTION" && prevPhaseForConsultRef.current !== "NIGHT_WOLF_ACTION") {
+      wolfConsultAbortRef.current = true; // abort any in-flight stream from previous night
+      setWolfConsultStatus("idle");
+      setWolfConsultText("");
+      setWolfConsultTarget(null);
+      wolfConsultAbortRef.current = false;
+    }
+    prevPhaseForConsultRef.current = gameState.phase;
+  }, [gameState.phase]);
+
   // ============================================
   // 同步 gameStateRef
   // ============================================
@@ -1870,6 +1893,46 @@ export function useGameLogic() {
     }
   }, [humanPlayer, setGameState, badgePhase, getToken, resolveVotesSafely, isWaitingForAI]);
 
+  /** 狼人请求AI队友意见（流式） */
+  const handleWolfConsultRequest = useCallback(async () => {
+    if (gameState.phase !== "NIGHT_WOLF_ACTION") return;
+    if (!humanPlayer || !isWolfRole(humanPlayer.role)) return;
+
+    wolfConsultAbortRef.current = false;
+    setWolfConsultStatus("consulting");
+    setWolfConsultText("");
+    setWolfConsultTarget(null);
+
+    const wolves = gameState.players.filter((p) => isWolfRole(p.role) && p.alive && !p.isHuman);
+    if (wolves.length === 0) {
+      setWolfConsultStatus("idle");
+      return;
+    }
+    const consultStream = generateWolfConsultationStream(gameState, wolves);
+
+    let accText = "";
+    try {
+      for await (const chunk of consultStream) {
+        if (wolfConsultAbortRef.current) break;
+        accText += chunk;
+        setWolfConsultText(accText);
+      }
+    } catch {
+      // stream error — if not aborted, mark as done with whatever text accumulated
+      if (!wolfConsultAbortRef.current) {
+        setWolfConsultTarget(null);
+        setWolfConsultStatus("done");
+      }
+      return;
+    }
+
+    if (!wolfConsultAbortRef.current) {
+      const pt = consultStream.parsedTarget;
+      setWolfConsultTarget(typeof pt === "number" && pt !== -1 ? pt : null);
+      setWolfConsultStatus("done");
+    }
+  }, [gameState, humanPlayer]);
+
   /** 夜晚行动 */
   const handleNightAction = useCallback(async (targetSeat: number, witchAction?: "save" | "poison" | "pass") => {
     if (!humanPlayer) return;
@@ -1912,6 +1975,9 @@ export function useGameLogic() {
     }
     // 狼人击杀
     else if (gameState.phase === "NIGHT_WOLF_ACTION" && isWolfRole(humanPlayer.role)) {
+      // Abort any in-flight wolf consultation stream
+      wolfConsultAbortRef.current = true;
+
       if (targetSeat === -1) {
         // 狼人选择空刀
         currentState = {
@@ -2275,6 +2341,12 @@ export function useGameLogic() {
     scrollToBottom,
     advanceSpeech,
     togglePause,
+
+    // Wolf consultation
+    wolfConsultStatus,
+    wolfConsultText,
+    wolfConsultTarget,
+    handleWolfConsultRequest,
     markCurrentSegmentCompleted,
     isCurrentSegmentCompleted,
     shouldAutoAdvanceToNextAI,

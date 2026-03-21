@@ -25,6 +25,7 @@ import { PhaseManager } from "@/game/core/PhaseManager";
 import type { PromptResult } from "@/game/core/types";
 import { buildCachedSystemMessageFromParts, buildGameContext, buildTodayTranscript, getDayStartIndex } from "./prompt-utils";
 import { getI18n } from "@/i18n/translator";
+import { GAME_CONFIG } from "@/lib/game-constants";
 
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
@@ -1815,6 +1816,200 @@ export async function generateSeerAction(
   });
 
   return parsedSeat;
+}
+
+/**
+ * Wolf team consultation via a single streaming AI call.
+ *
+ * The AI impersonates all wolves, simulates a short internal discussion,
+ * then outputs a final DECISION line.  Two sentinel values are returned:
+ *   ≥ 0  → valid target seat (0-indexed)
+ *   -1   → blank knife / pass
+ *
+ * The generator streams raw text chunks so callers can display reasoning
+ * progressively.  After the generator is exhausted the parsed target seat
+ * (or -1) is available via the `parsedTarget` property injected onto the returned generator.
+ *
+ * Retries (up to GAME_CONFIG.MAX_WOLF_CONSULT_RETRIES) are attempted on
+ * parse failure; on exhaustion the function falls back to -1 (pass).
+ */
+export function generateWolfConsultationStream(
+  state: GameState,
+  wolves: Player[],
+): AsyncGenerator<string, void, unknown> & { parsedTarget: number } {
+  const { t } = getI18n();
+  const alivePlayers = state.players.filter((p) => p.alive);
+
+  // Build wolf list with personality
+  const wolfList = wolves.map((w) => {
+    const persona = w.agentProfile?.persona;
+    const parts: string[] = [];
+    if (persona?.mbti) parts.push(persona.mbti);
+    if (persona?.styleLabel) parts.push(persona.styleLabel);
+    const personality = parts.join("，") || t("gameMaster.badgeSignup.noPersonality");
+    return t("gameMaster.wolfConsultation.wolfLine", {
+      seat: w.seat + 1,
+      name: w.displayName,
+      personality,
+    });
+  }).join("\n");
+
+  const options = alivePlayers
+    .map((p) => t("prompts.night.option", { seat: p.seat + 1, name: p.displayName }))
+    .join(t("promptUtils.gameContext.listSeparator"));
+
+  // Build game context from first wolf's perspective (they all share the same knowledge)
+  const firstWolf = wolves[0];
+  const context = buildGameContext(state, firstWolf);
+
+  // Use t.raw so literal {} chars in the JSON example aren't treated as ICU params
+  const systemPrompt = t.raw("gameMaster.wolfConsultation.systemPrompt") as string;
+  const userPromptTemplate = t.raw("gameMaster.wolfConsultation.userPrompt") as string;
+  const userPrompt = userPromptTemplate
+    .replace("{context}", context)
+    .replace("{wolfList}", wolfList)
+    .replace("{options}", options);
+
+  const messages: LLMMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+
+  // Pick the model from the first wolf's agent profile, fallback to summary model
+  const modelRef = firstWolf.agentProfile?.modelRef;
+  const modelOptions = modelRef
+    ? mergeOptionsFromModelRef(modelRef, { model: modelRef.model, messages, temperature: GAME_TEMPERATURE.ACTION })
+    : { model: getSummaryModel(), messages, temperature: GAME_TEMPERATURE.ACTION };
+
+  // Shared closure variable updated by the inner generator; exposed as a getter on the returned object
+  let lastParsedTarget = -1;
+
+  // Generator object with mutable result field
+  const gen = (async function* (): AsyncGenerator<string, void, unknown> {
+    let fullText = "";
+    let parsedTarget = -1; // default: blank knife
+    const startTime = Date.now();
+
+    const MAX_RETRIES = GAME_CONFIG.MAX_WOLF_CONSULT_RETRIES;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      fullText = "";
+      try {
+        for await (const chunk of generateCompletionStream(modelOptions)) {
+          fullText += chunk;
+          if (attempt === 0) {
+            // Only yield chunks on the first attempt; retries happen silently
+            yield chunk;
+          }
+        }
+
+        // --- Parse DECISION line ---
+        const parsed = parseWolfConsultationDecision(fullText, alivePlayers);
+        if (parsed !== null) {
+          parsedTarget = parsed;
+          await aiLogger.log({
+            type: "wolf_action",
+            request: {
+              model: modelOptions.model,
+              messages,
+              player: { playerId: firstWolf.playerId, displayName: firstWolf.displayName, seat: firstWolf.seat, role: firstWolf.role },
+            },
+            response: {
+              content: fullText,
+              raw: fullText,
+              parsed: { targetSeat: parsedTarget },
+              duration: Date.now() - startTime,
+            },
+          });
+          lastParsedTarget = parsedTarget;
+          return;
+        }
+
+        // Parse failed — retry (up to limit)
+        if (attempt < MAX_RETRIES) continue;
+
+      } catch (err) {
+        await aiLogger.log({
+          type: "wolf_action",
+          request: {
+            model: modelOptions.model,
+            messages,
+            player: { playerId: firstWolf.playerId, displayName: firstWolf.displayName, seat: firstWolf.seat, role: firstWolf.role },
+          },
+          response: { content: fullText, duration: Date.now() - startTime },
+          error: String(err),
+        });
+        if (attempt < MAX_RETRIES) continue;
+      }
+    }
+
+    // Exhausted retries — log and fall back to pass
+    await aiLogger.log({
+      type: "wolf_action",
+      request: {
+        model: modelOptions.model,
+        messages,
+        player: { playerId: firstWolf.playerId, displayName: firstWolf.displayName, seat: firstWolf.seat, role: firstWolf.role },
+      },
+      response: { content: fullText, parsed: { targetSeat: -1, note: "parse_failed_fallback" }, duration: Date.now() - Date.now() },
+    });
+    lastParsedTarget = -1;
+  })();
+
+  // Expose parsedTarget as a getter so callers always read the latest value after iteration
+  return Object.defineProperty(gen, "parsedTarget", {
+    get: () => lastParsedTarget,
+    enumerable: true,
+    configurable: true,
+  }) as AsyncGenerator<string, void, unknown> & { parsedTarget: number };
+}
+
+/** Parse the DECISION line from a wolf consultation response. Returns null on parse failure. */
+function parseWolfConsultationDecision(text: string, alivePlayers: Player[]): number | null {
+  // Strict: last DECISION line
+  const decisionMatch = text.match(/DECISION\s*:\s*(\{[\s\S]*?\})\s*$/im);
+  if (decisionMatch) {
+    try {
+      const parsed = JSON.parse(decisionMatch[1]) as { target?: unknown };
+      return resolveWolfDecisionTarget(parsed.target, alivePlayers);
+    } catch { /* fallthrough */ }
+  }
+
+  // Lenient: any DECISION line anywhere
+  const anyDecision = text.match(/DECISION\s*:?\s*\{[^}]*"target"\s*:\s*([^}]+)\}/i);
+  if (anyDecision) {
+    try {
+      const inner = `{"target":${anyDecision[1].trim().replace(/,$/, "")}}`;
+      const parsed = JSON.parse(inner) as { target?: unknown };
+      return resolveWolfDecisionTarget(parsed.target, alivePlayers);
+    } catch { /* fallthrough */ }
+  }
+
+  // Ultra-lenient: DECISION followed by a number or "pass"
+  const ultralLenient = text.match(/DECISION\s*:?\s*(?:\{[^}]*\})?\s*["']?(\d+|pass)["']?/i);
+  if (ultralLenient) {
+    const raw = ultralLenient[1].toLowerCase().trim();
+    if (raw === "pass") return -1;
+    const seat = parseInt(raw, 10) - 1;
+    if (alivePlayers.some((p) => p.seat === seat)) return seat;
+  }
+
+  return null;
+}
+
+function resolveWolfDecisionTarget(target: unknown, alivePlayers: Player[]): number | null {
+  if (typeof target === "string") {
+    if (target.toLowerCase() === "pass") return -1;
+    const seat = parseInt(target, 10) - 1;
+    if (alivePlayers.some((p) => p.seat === seat)) return seat;
+    return null;
+  }
+  if (typeof target === "number") {
+    const seat = target - 1;
+    if (alivePlayers.some((p) => p.seat === seat)) return seat;
+    return null;
+  }
+  return null;
 }
 
 export async function generateWolfAction(

@@ -9,6 +9,7 @@ import { WerewolfIcon, VillagerIcon, VoteIcon } from "@/components/icons/FlatIco
 import { VoteResultCard } from "./VoteResultCard";
 import { VotingProgress } from "./VotingProgress";
 import { WolfPlanningPanel } from "./WolfPlanningPanel";
+import type { WolfConsultStatus } from "@/hooks/useGameLogic";
 import { MentionInput } from "./MentionInput";
 import { TalkingAvatar } from "./TalkingAvatar";
 import { VoiceRecorder, type VoiceRecorderHandle } from "./VoiceRecorder";
@@ -279,6 +280,11 @@ interface DialogAreaProps {
   onViewAnalysis?: () => void;
   isAnalysisLoading?: boolean;
   onSpeechDirectionChoice?: (direction: "clockwise" | "counterclockwise") => void;
+  // Wolf consultation
+  wolfConsultStatus?: WolfConsultStatus;
+  wolfConsultText?: string;
+  wolfConsultTarget?: number | null;
+  onWolfConsultRequest?: () => void;
 }
 
 // 等待状态动画组件已移除，与当前简洁风格不符
@@ -393,6 +399,10 @@ export function DialogArea({
   onViewAnalysis,
   isAnalysisLoading = false,
   onSpeechDirectionChoice,
+  wolfConsultStatus,
+  wolfConsultText,
+  wolfConsultTarget,
+  onWolfConsultRequest,
 }: DialogAreaProps) {
   const t = useTranslations();
   const isGenshinMode = !!gameState.isGenshinMode;
@@ -1051,6 +1061,11 @@ export function DialogArea({
   const showHunterPassOption = phase === "HUNTER_SHOOT"
     && humanPlayer?.role === "Hunter"
     && selectedSeat === null;
+  const showWolfBlankKnifeOption = phase === "NIGHT_WOLF_ACTION"
+    && humanPlayer && isWolfRole(humanPlayer.role)
+    && humanPlayer.alive
+    && !isWaitingForAI
+    && selectedSeat === null;
   const showSpeechDirection = phase === "DAY_SPEECH_DIRECTION"
     && humanPlayer?.alive
     && humanPlayer?.seat === gameState.badge.holderSeat;
@@ -1095,6 +1110,7 @@ export function DialogArea({
     || showBadgeSignupWaiting
     || showBadgeTransferOption
     || showHunterPassOption
+    || showWolfBlankKnifeOption
     || showSpeechDirection
     || showActionConfirm
     || showWitchPanel
@@ -1212,7 +1228,14 @@ export function DialogArea({
         {/* 狼人协作面板 */}
         {gameState.phase === "NIGHT_WOLF_ACTION" && humanPlayer && isWolfRole(humanPlayer.role) && (
           <div className="mb-3">
-            <WolfPlanningPanel gameState={gameState} humanPlayer={humanPlayer} />
+            <WolfPlanningPanel
+              gameState={gameState}
+              humanPlayer={humanPlayer}
+              consultStatus={wolfConsultStatus}
+              consultText={wolfConsultText}
+              consultTarget={wolfConsultTarget}
+              onConsultRequest={onWolfConsultRequest}
+            />
           </div>
         )}
 
@@ -1789,6 +1812,20 @@ export function DialogArea({
                           type="button"
                         >
                           {t("dialog.hunter.skipShoot" as any)}
+                          <CaretRight size={14} weight="bold" />
+                        </button>
+                      )}
+
+                      {showWolfBlankKnifeOption && !isTyping && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNightAction?.(-1);
+                          }}
+                          className="wc-action-btn text-sm h-9 px-4"
+                          type="button"
+                        >
+                          {t("system.wolfBlankKnife")}
                           <CaretRight size={14} weight="bold" />
                         </button>
                       )}

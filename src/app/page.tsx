@@ -172,6 +172,10 @@ export default function Home() {
     advanceSpeech,
     markCurrentSegmentCompleted,
     shouldAutoAdvanceToNextAI,
+    wolfConsultStatus,
+    wolfConsultText,
+    wolfConsultTarget,
+    handleWolfConsultRequest,
   } = useGameLogic();
   const { settings, setBgmVolume, setSoundEnabled, setAiVoiceEnabled, setGenshinMode, setSpectatorMode, setAutoAdvanceDialogueEnabled } = useSettings();
   const { bgmVolume, isSoundEnabled, isAiVoiceEnabled, isGenshinMode, isSpectatorMode, isAutoAdvanceDialogueEnabled } = settings;
@@ -1596,6 +1600,10 @@ export default function Home() {
                       onSpeechDirectionChoice={handleHumanSpeechDirectionChoice}
                       onViewAnalysis={handleViewAnalysis}
                       isAnalysisLoading={isAnalysisLoading}
+                      wolfConsultStatus={wolfConsultStatus}
+                      wolfConsultText={wolfConsultText}
+                      wolfConsultTarget={wolfConsultTarget}
+                      onWolfConsultRequest={handleWolfConsultRequest}
                     />
 
                     {/* 移动端玩家条 */}

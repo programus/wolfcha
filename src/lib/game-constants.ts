@@ -13,6 +13,8 @@ export const GAME_CONFIG = {
   MAX_REVOTE_COUNT: 3,
   /** 警长竞选最大重投次数 */
   MAX_BADGE_REVOTE_COUNT: 2,
+  /** 狼人协商 AI 最大应用层重试次数（解析失败时重试，超限降级为 pass） */
+  MAX_WOLF_CONSULT_RETRIES: 2,
   /**
    * 人类玩家单次发言回合内所有消息的总字符数上限（跨消息气泡累加）。
    * AI 发言 prompt 里也会写入相同数字作为长度约束。
