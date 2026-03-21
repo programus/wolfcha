@@ -152,7 +152,8 @@ export const buildSituationalStrategy = (state: GameState, player: Player): stri
       const teammateList = wolfTeammatesInCandidates
         .map(p => t("promptUtils.gameContext.seatLabel", { seat: p.seat + 1 }))
         .join(separator);
-      lines.push(t("promptUtils.situationalStrategy.wolfBadgeCampaign", { teammates: teammateList }));
+      const raw = t.raw("promptUtils.situationalStrategy.wolfBadgeCampaign") as string;
+      lines.push(raw.replace("{teammates}", teammateList));
     }
   }
 
