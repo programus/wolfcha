@@ -20,6 +20,7 @@ class AudioManager {
   private state: PlayState = "idle";
   private cache = new Map<string, { blob: Blob; durationMs?: number }>();
   private enabled = false;
+  private idleWaiters: Array<() => void> = [];
   
   // Callbacks
   private onPlayStart: ((playerId: string) => void) | null = null;
@@ -160,6 +161,38 @@ class AudioManager {
     this.cache.clear();
   }
 
+  /** 当前是否完全空闲（无播放、无队列、无加载） */
+  isIdle(): boolean {
+    return this.state === "idle" && this.queue.length === 0;
+  }
+
+  /**
+   * 返回一个 Promise，在音频完全播完（队列清空、状态回到 idle）后 resolve。
+   * 如果当前已经空闲则立即 resolve；timeoutMs 超时后强制 resolve 防止卡死。
+   */
+  waitUntilIdle(timeoutMs = 30000): Promise<void> {
+    if (this.isIdle()) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      let resolved = false;
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        const idx = this.idleWaiters.indexOf(done);
+        if (idx !== -1) this.idleWaiters.splice(idx, 1);
+        resolve();
+      };
+      this.idleWaiters.push(done);
+      if (timeoutMs > 0) setTimeout(done, timeoutMs);
+    });
+  }
+
+  private notifyIdleWaitersIfIdle() {
+    if (this.state !== "idle" || this.queue.length !== 0) return;
+    const waiters = [...this.idleWaiters];
+    this.idleWaiters = [];
+    waiters.forEach((w) => w());
+  }
+
   private async processQueue() {
     if (!this.enabled) return;
     if (this.state !== "idle") return;
@@ -268,7 +301,8 @@ class AudioManager {
       this.currentTask = null;
       this.currentAudio = null;
       this.state = "idle";
-      this.processQueue();
+      this.processQueue(); // 如果队列非空，此调用会同步将 state 改为 "loading"
+      this.notifyIdleWaitersIfIdle(); // 只有队列已空时才真正触发
     }
   }
 }

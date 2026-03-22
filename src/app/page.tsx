@@ -763,7 +763,7 @@ export default function Home() {
 
   const autoAdvanceTimeoutRef = useRef<number | null>(null);
   const lastAutoAdvanceSignatureRef = useRef<string | null>(null);
-  const autoAdvanceDelayMs = 2500;
+  const autoAdvanceCancelRef = useRef<(() => void) | null>(null);
   
   // Track when typing finishes to trigger auto-advance
   useEffect(() => {
@@ -771,6 +771,10 @@ export default function Home() {
       if (autoAdvanceTimeoutRef.current !== null) {
         window.clearTimeout(autoAdvanceTimeoutRef.current);
         autoAdvanceTimeoutRef.current = null;
+      }
+      if (autoAdvanceCancelRef.current) {
+        autoAdvanceCancelRef.current();
+        autoAdvanceCancelRef.current = null;
       }
     };
 
@@ -819,10 +823,23 @@ export default function Home() {
 
       clearAutoAdvanceTimeout();
 
-      const delayMs = autoAdvanceDelayMs;
-      autoAdvanceTimeoutRef.current = window.setTimeout(() => {
-        void handleAdvanceDialogue();
-      }, delayMs);
+      if (isAiVoiceEnabled && !audioManager.isIdle()) {
+        // TTS 启用且音频正在播放：等音频播完后再等 500ms
+        let cancelled = false;
+        autoAdvanceCancelRef.current = () => { cancelled = true; };
+        void audioManager.waitUntilIdle(30000).then(() => {
+          if (cancelled) return;
+          autoAdvanceTimeoutRef.current = window.setTimeout(() => {
+            autoAdvanceTimeoutRef.current = null;
+            void handleAdvanceDialogue();
+          }, 500);
+        });
+      } else {
+        // TTS 未启用，或音频已空闲：保持原来的 2500ms
+        autoAdvanceTimeoutRef.current = window.setTimeout(() => {
+          void handleAdvanceDialogue();
+        }, 2500);
+      }
       return;
     }
 
@@ -848,6 +865,7 @@ export default function Home() {
     gameState.phase,
     handleAdvanceDialogue,
     humanPlayer,
+    isAiVoiceEnabled,
     isAutoAdvanceDialogueEnabled,
     isNotebookOpen,
     isRoleRevealOpen,
