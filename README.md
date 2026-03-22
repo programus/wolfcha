@@ -1,131 +1,100 @@
-[English](./README.md) | [简体中文](./README.zh.md)
+﻿[English](./README.en.md) | 简体中文
 
-# Wolfcha
+# Wolfcha (猹杀)
 
-<div align="center">
-  <img src="public/logo.png" alt="Wolfcha Logo" width="240" />
-  <h3>Play Werewolf with AI — Watch the Models Battle It Out</h3>
-  <p>
-    <a href="https://wolf-cha.com">Play Online (wolf-cha.com)</a>
-  </p>
-</div>
+> 一款 AI 狼人杀游戏 — 和 AI 模型一起玩狼人杀
 
-## 🙏 Sponsors
+## 🔀 关于本 Fork
 
-![ZenMux Banner](public/sponsor/zenmux-banner.png)
+本项目 fork 自 [oil-oil/wolfcha](https://github.com/oil-oil/wolfcha)，原作诞生于「观猹 + 魔搭 环球黑客松」。感谢原团队开源！原版在线体验：[wolf-cha.com](https://wolf-cha.com)。
 
-Current sponsors:
+## 📝 主要改动
 
-*   [ZenMux](https://zenmux.ai/invite/DMMBVZ) - Powers the core game flow, roleplay, and summary features with AI models
-*   [Dashscope](https://bailian.console.aliyun.com/) - Provides additional AI model support
-*   [OpenCreator](https://opencreator.io?promo=wolfcha) - Generates AI character portraits
+相比原版，本 fork 的改动主要包括：
 
----
+- **部署方式**：面向 NAS / 家庭服务器，以 Docker 自托管为主要使用场景
+- **AI 提供商**：扩展支持更多 AI 接口，包括 OpenAI、Google Gemini、Anthropic 以及任意 OpenAI 兼容接口（如[硅基流动](https://cloud.siliconflow.cn/i/5SOAHcPz)、Ollama 等）
+- **AI 推理优化**：
+  - 告知 AI 角色常用游戏技巧（如狼人悍跳、警徽流验人等）
+  - 优化了喂给 AI 的上下文信息结构
+  - 修复了原提示词中的部分逻辑矛盾
+  - 允许狼人空刀和守卫空守
+- **UI 优化**：
+  - 增加了模型选择设置
+  - 增加了游戏角色配置和场景说明
+  - 允许狼人空刀和守卫空守
+- **游戏规则文档**：新增 [游戏指南](guide.zh.md)
 
-> **Note**: This project was born at the **"Watcha + ModelScope Global Hackathon"** as an AI-native game.
-> 
-> "Wolfcha" combines Wolf (Werewolf) + Cha (猹, a character from Chinese literature). It's a nod to the hackathon host while also capturing the fun of watching AI characters interact — like spectating a show.
+## 🚀 Docker 快速部署
 
-## 📖 Background
+### 前置要求
 
-After graduating, getting 8-12 people together for a proper Werewolf game became nearly impossible. While Werewolf is fundamentally a social game, its core appeal — logical deduction, verbal sparring, and reading between the lines — remains captivating even without the social element.
+至少需要配置以下**任意一个** AI 提供商的 API Key 才能正常运行。
 
-To enjoy Werewolf anytime, anywhere, we built this **AI-powered version**. As the name suggests, every player except you (Seer, Witch, Hunter, Guard, Werewolves, etc.) is controlled by AI.
-
-## ✨ Core Features
-
-### 1. Dual-Layer AI Roleplay
-Thanks to the growing context windows and instruction-following capabilities of large language models (LLMs), we've implemented a sophisticated dual-layer roleplay system:
-*   **Layer 1**: The AI plays a "virtual player" with a unique personality and background.
-*   **Layer 2**: This virtual player then takes on a Werewolf role (e.g., Seer) and speaks, bluffs, and reasons based on the game state.
-
-Every conversation is generated in real-time, full of unpredictability and fun.
-
-### 2. AI Model Arena
-**This isn't just Werewolf — it's a battleground for AI models.**
-
-We've integrated multiple top AI models to compete against each other. After each game, you can see which model powered each character. It's a hidden "Turing test" — observe which model reasons sharply, which one seems "adorably clueless," and which one sounds the most human.
-
-Current built-in models (subject to project configuration):
-*   **DeepSeek V3.2**
-*   **Qwen3-235B-A22B**
-*   **Kimi K2**
-*   **Gemini 3 Flash**
-*   **Seed 1.8 (ByteDance)**
-
-<div align="center">
-  <img src="https://img.shields.io/badge/DeepSeek-V3.2-1B75FF?style=for-the-badge" alt="DeepSeek" />
-  <img src="https://img.shields.io/badge/Qwen-Qwen3-5A6CFF?style=for-the-badge" alt="Qwen" />
-  <img src="https://img.shields.io/badge/Moonshot%20AI-Kimi-111111?style=for-the-badge" alt="Kimi" />
-  <br/>
-  <img src="https://img.shields.io/badge/ByteDance-Seed-333333?style=for-the-badge" alt="Seed" />
-</div>
-
-### 3. Immersive Retro Experience
-While we don't have a professional art team, we've crafted a polished UI/UX:
-*   **Retro Design Style**: Clean layouts with vintage color palettes.
-*   **Dynamic Interactions**:
-    *   Eye-blink transitions for day/night changes.
-    *   Character lip-sync animations during speech.
-    *   Unique character portraits for special roles during night actions.
-
-## 🧭 Roadmap
-
-We're continuing to improve:
-*   **Mobile Optimization**: Play seamlessly on any device.
-*   **Flexible Player Count**: Support 8-12 player custom games.
-*   **Post-Game Review / Chat**: Reflect on strategies and memorable moments.
-*   **Special Abilities**: Unique mechanics like time rewind and AI insight.
-*   **Custom Model Selection**: Choose which AI models join your game.
-*   **Multiplayer Mode**: Play with friends alongside AI characters.
-*   **Character Ratings**: Upvote standout personalities/models to find the best Werewolf players.
-
-## 🛠️ Tech Stack
-
-Built with modern web technologies:
-
-*   **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
-*   **Language**: [TypeScript](https://www.typescriptlang.org/)
-*   **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
-*   **UI Components**: [Radix UI](https://www.radix-ui.com/), [Lucide React](https://lucide.dev/)
-*   **State Management**: [Jotai](https://jotai.org/) 
-*   **Editor**: [Tiptap](https://tiptap.dev/) (For rich text interactions)
-*   **Animations**: [Framer Motion](https://www.framer.com/motion/)
-*   **Avatar Generation**: [DiceBear](https://www.dicebear.com/) (Notionists style)
-*   **AI Integration**: [ZenMux](https://zenmux.ai/invite/DMMBVZ) (Unified interface for LLMs)
-
-## 🚀 Local Development
-
-To run this project locally:
-
-1.  **Clone the repository**
+### 方式一：docker run
 
 ```bash
-git clone https://github.com/oil-oil/wolfcha.git
-cd wolfcha
+docker run -d \
+  -p 7860:7860 \
+  -e OPENAI_COMPATIBLE_BASE_URL=https://api.siliconflow.cn/v1 \
+  -e OPENAI_COMPATIBLE_API_KEY=your-api-key \
+  --restart unless-stopped \
+  programus/wolfcha-ex:latest
 ```
 
-2.  **Install dependencies**
+启动后访问 [http://localhost:7860](http://localhost:7860)。
 
-```bash
-# Using pnpm (recommended)
-pnpm install
+### 方式二：docker-compose
 
-# Or using npm
-npm install
+```yaml
+# docker-compose.yml
+services:
+  wolfcha:
+    image: programus/wolfcha-ex:latest
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env.docker
+    restart: unless-stopped
 ```
 
-3.  **Configure environment variables**
+创建 `.env.docker` 文件并填入所需环境变量（参见下方完整表格）。
 
-You'll need to set up API keys (ZenMux, etc.) for full functionality. Refer to `.env.example` and create your `.env.local`.
+## ⚙️ 环境变量
 
-4.  **Start the development server**
+| 变量名 | 说明 | 默认值 |
+|---|---|---|
+| `SITE_PASSWORD` | 站点访问密码（留空则不设密码） | 空（无密码） |
+| `OPENAI_API_KEY` | OpenAI API Key | — |
+| `OPENAI_BASE_URL` | OpenAI 接口地址 | `https://api.openai.com/v1` |
+| `GOOGLE_API_KEY` | Google Gemini API Key | — |
+| `GOOGLE_BASE_URL` | Google 接口地址 | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API Key | — |
+| `ANTHROPIC_BASE_URL` | Anthropic 接口地址 | `https://api.anthropic.com/v1` |
+| `OPENAI_COMPATIBLE_BASE_URL` | 任意 OpenAI 兼容服务的接口地址 | — |
+| `OPENAI_COMPATIBLE_API_KEY` | 兼容服务的 API Key | — |
+| `OPENAI_COMPATIBLE_MODELS` | 模型 ID 列表，逗号分隔；留空则自动从 `/models` 拉取 | 自动获取 |
+| `ZENMUX_API_KEY` | ZenMux 聚合 API Key | — |
+| `DASHSCOPE_API_KEY` | 阿里云百炼 API Key | — |
+| `NEXT_PUBLIC_SHOW_DEVTOOLS` | 非生产环境是否显示开发工具 | `"true"` |
 
-```bash
-pnpm dev
-```
+### 关于 AI 提供商的说明
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+**`OPENAI_COMPATIBLE_*`** 是最灵活的选项，支持任何兼容 OpenAI 接口的服务：[硅基流动](https://cloud.siliconflow.cn/i/5SOAHcPz)、本地 Ollama、LM Studio 等。`OPENAI_COMPATIBLE_MODELS` 可留空（自动拉取），也可手动填写，格式：`model-a,model-b`。
+
+**`SITE_PASSWORD`** 留空则不启用访问密码，适合家庭局域网部署。
+
+### 已验证的模型
+
+以下模型经实际测试可用：
+
+| 提供商 | 模型 |
+|---|---|
+| OpenAI | GPT-5.1 |
+| Google | Gemini 2.5 Flash |
+| OpenAI Compatible | [硅基流动（SiliconFlow）](https://cloud.siliconflow.cn/i/5SOAHcPz)各模型 |
+
+其他提供商和模型理论上兼容，但未经充分测试。
 
 ## 📄 License
 

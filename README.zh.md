@@ -1,131 +1,100 @@
-[English](./README.md) | [简体中文](./README.zh.md)
+﻿[English](./README.en.md) | 简体中文
 
 # Wolfcha (猹杀)
 
-<div align="center">
-  <img src="public/logo.png" alt="Wolfcha Logo" width="240" />
-  <h3>在狼人杀里，和 AI 赛博斗蛐蛐</h3>
-  <p>
-    <a href="https://wolf-cha.com">在线体验 (wolf-cha.com)</a>
-  </p>
-</div>
+> 一款 AI 狼人杀游戏 — 和 AI 模型一起玩狼人杀
 
-## 🙏 感谢赞助
+## 🔀 关于本 Fork
 
-![ZenMux Banner](public/sponsor/zenmux-banner.png)
+本项目 fork 自 [oil-oil/wolfcha](https://github.com/oil-oil/wolfcha)，原作诞生于「观猹 + 魔搭 环球黑客松」。感谢原团队开源！原版在线体验：[wolf-cha.com](https://wolf-cha.com)。
 
-现有赞助商：
+## 📝 主要改动
 
-*   [ZenMux](https://zenmux.ai/invite/DMMBVZ) - 提供游戏核心流程、角色扮演、总结记录等 AI 模型能力支持
-*   [Bailian](https://bailian.console.aliyun.com/) - 提供部分 AI 模型能力支持
-*   [OpenCreator](https://opencreator.io?promo=wolfcha) - 提供角色 AI 立绘生成支持
+相比原版，本 fork 的改动主要包括：
 
----
+- **部署方式**：面向 NAS / 家庭服务器，以 Docker 自托管为主要使用场景
+- **AI 提供商**：扩展支持更多 AI 接口，包括 OpenAI、Google Gemini、Anthropic 以及任意 OpenAI 兼容接口（如[硅基流动](https://cloud.siliconflow.cn/i/5SOAHcPz)、Ollama 等）
+- **AI 推理优化**：
+  - 告知 AI 角色常用游戏技巧（如狼人悍跳、警徽流验人等）
+  - 优化了喂给 AI 的上下文信息结构
+  - 修复了原提示词中的部分逻辑矛盾
+  - 允许狼人空刀和守卫空守
+- **UI 优化**：
+  - 增加了模型选择设置
+  - 增加了游戏角色配置和场景说明
+  - 允许狼人空刀和守卫空守
+- **游戏规则文档**：新增 [游戏指南](guide.zh.md)
 
-> **Note**: 这是一个诞生于 **「观猹 + 魔搭 环球黑客松」** 的 AI 原生游戏项目。
-> 
-> "Wolfcha" 这个名字由 Wolf (狼人杀) + Cha (猹) 组成。既是为了致敬黑客松的主办方，取 "Watch" (观察) 之意；同时也呼应了在狼人杀游戏中，我们观察 AI 互动的“吃瓜”心态。
+## 🚀 Docker 快速部署
 
-## 📖 项目背景
+### 前置要求
 
-自从大学毕业后，想要凑齐 8 到 12 个人玩一局完整的狼人杀，变得越来越困难。狼人杀本质上是一个社交游戏，但抛开社交属性，其核心的逻辑推理、话术博弈以及从只言片语中寻找线索的过程，依然非常迷人。
+至少需要配置以下**任意一个** AI 提供商的 API Key 才能正常运行。
 
-为了让自己随时随地都能体验到狼人杀的乐趣，我们开发了这款 **AI 版本的狼人杀**。顾名思义，除了你自己，其他所有角色（女巫、猎人、守卫、狼人等）都由 AI 扮演。
-
-## ✨ 核心玩法与亮点
-
-### 1. 双层 AI 扮演机制
-得益于大语言模型（LLM）日益增长的上下文窗口（Context Window）和指令遵循能力，我们实现了一个复杂的双层扮演系统：
-*   **第一层**：AI 扮演一个具有特定性格、背景的“虚拟玩家”。
-*   **第二层**：这个“虚拟玩家”在游戏中扮演狼人杀的具体身份（如预言家），并基于游戏局势进行发言、伪装和推理。
-
-每一局的对话都是实时生成的，充满了不确定性和趣味性。
-
-### 2. 大模型赛博斗蛐蛐 (Model Arena)
-**这不仅是狼人杀，更是一场模型能力的竞技场。**
-
-我们在游戏中接入了多款大模型，让它们同台竞技。游戏结束后，你可以看到每个角色背后对应的模型。这是一场隐藏的“图灵测试”——你可以观察在这个复杂的博弈场景中，哪个模型逻辑严密，哪个模型表现得“蠢萌”，又是哪个模型说话最有人味儿。
-
-当前内置模型（以项目内配置为准）：
-*   **DeepSeek V3.2**
-*   **Qwen3-235B-A22B**
-*   **Kimi K2**
-*   **Gemini 3 Flash**
-*   **Seed 1.8 (ByteDance)**
-
-<div align="center">
-  <img src="https://img.shields.io/badge/DeepSeek-V3.2-1B75FF?style=for-the-badge" alt="DeepSeek" />
-  <img src="https://img.shields.io/badge/Qwen-Qwen3-5A6CFF?style=for-the-badge" alt="Qwen" />
-  <img src="https://img.shields.io/badge/Moonshot%20AI-Kimi-111111?style=for-the-badge" alt="Kimi" />
-  <br/>
-  <img src="https://img.shields.io/badge/ByteDance-Seed-333333?style=for-the-badge" alt="Seed" />
-</div>
-
-### 3. 沉浸式复古体验
-虽然没有专业的美术团队，但我们通过精心的 UI/UX 设计提升了游戏体验：
-*   **复古设计风格**：清爽的排版与复古色调。
-*   **动态交互细节**：
-    *   天黑/天亮时的眨眼转场效果。
-    *   角色发言时，嘴巴会随语音节奏张合。
-    *   神职角色发言时配有专属立绘。
-
-## 🧭 后续计划
-
-我们还会继续打磨这些方向：
-*   **移动端适配**：让大家随时爽玩。
-*   **人数自由选择**：支持 8-12 人自定义人数开局。
-*   **结束后的复盘 / 闲聊**：沉淀一局中的思路与段子。
-*   **特色技能系统**：如时间回溯、AI 洞察等狼人杀特色玩法。
-*   **自定义参与模型**：选择你想上场的大模型。
-*   **联机模式**：可以和朋友一起跟 AI 玩狼人杀。
-*   **人物点赞**：为表现出色的性格/模型点赞，看到最会玩狼人杀的大模型。
-
-## 🛠️ 技术栈
-
-本项目基于现代 Web 技术栈构建：
-
-*   **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
-*   **Language**: [TypeScript](https://www.typescriptlang.org/)
-*   **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
-*   **UI Components**: [Radix UI](https://www.radix-ui.com/), [Lucide React](https://lucide.dev/)
-*   **State Management**: [Jotai](https://jotai.org/) 
-*   **Editor**: [Tiptap](https://tiptap.dev/) (For rich text interactions)
-*   **Animations**: [Framer Motion](https://www.framer.com/motion/)
-*   **Avatar Generation**: [DiceBear](https://www.dicebear.com/) (Notionists style)
-*   **AI Integration**: [ZenMux](https://zenmux.ai/invite/DMMBVZ) (Unified interface for LLMs)
-
-## 🚀 本地运行
-
-如果你想在本地运行本项目：
-
-1.  **克隆仓库**
+### 方式一：docker run
 
 ```bash
-git clone https://github.com/oil-oil/wolfcha.git
-cd wolfcha
+docker run -d \
+  -p 7860:7860 \
+  -e OPENAI_COMPATIBLE_BASE_URL=https://api.siliconflow.cn/v1 \
+  -e OPENAI_COMPATIBLE_API_KEY=your-api-key \
+  --restart unless-stopped \
+  programus/wolfcha-ex:latest
 ```
 
-2.  **安装依赖**
+启动后访问 [http://localhost:7860](http://localhost:7860)。
 
-```bash
-# Using pnpm (recommended)
-pnpm install
+### 方式二：docker-compose
 
-# Or using npm
-npm install
+```yaml
+# docker-compose.yml
+services:
+  wolfcha:
+    image: programus/wolfcha-ex:latest
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env.docker
+    restart: unless-stopped
 ```
 
-3.  **配置环境变量**
+创建 `.env.docker` 文件并填入所需环境变量（参见下方完整表格）。
 
-你需要配置相应的 API Keys (ZenMux 等) 才能运行完整功能。请参考 `.env.example` 并创建 `.env.local`。
+## ⚙️ 环境变量
 
-4.  **启动开发服务器**
+| 变量名 | 说明 | 默认值 |
+|---|---|---|
+| `SITE_PASSWORD` | 站点访问密码（留空则不设密码） | 空（无密码） |
+| `OPENAI_API_KEY` | OpenAI API Key | — |
+| `OPENAI_BASE_URL` | OpenAI 接口地址 | `https://api.openai.com/v1` |
+| `GOOGLE_API_KEY` | Google Gemini API Key | — |
+| `GOOGLE_BASE_URL` | Google 接口地址 | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API Key | — |
+| `ANTHROPIC_BASE_URL` | Anthropic 接口地址 | `https://api.anthropic.com/v1` |
+| `OPENAI_COMPATIBLE_BASE_URL` | 任意 OpenAI 兼容服务的接口地址 | — |
+| `OPENAI_COMPATIBLE_API_KEY` | 兼容服务的 API Key | — |
+| `OPENAI_COMPATIBLE_MODELS` | 模型 ID 列表，逗号分隔；留空则自动从 `/models` 拉取 | 自动获取 |
+| `ZENMUX_API_KEY` | ZenMux 聚合 API Key | — |
+| `DASHSCOPE_API_KEY` | 阿里云百炼 API Key | — |
+| `NEXT_PUBLIC_SHOW_DEVTOOLS` | 非生产环境是否显示开发工具 | `"true"` |
 
-```bash
-pnpm dev
-```
+### 关于 AI 提供商的说明
 
-打开浏览器访问 [http://localhost:3000](http://localhost:3000) 即可看到效果。
+**`OPENAI_COMPATIBLE_*`** 是最灵活的选项，支持任何兼容 OpenAI 接口的服务：[硅基流动](https://cloud.siliconflow.cn/i/5SOAHcPz)、本地 Ollama、LM Studio 等。`OPENAI_COMPATIBLE_MODELS` 可留空（自动拉取），也可手动填写，格式：`model-a,model-b`。
+
+**`SITE_PASSWORD`** 留空则不启用访问密码，适合家庭局域网部署。
+
+### 已验证的模型
+
+以下模型经实际测试可用：
+
+| 提供商 | 模型 |
+|---|---|
+| OpenAI | GPT-5.1 |
+| Google | Gemini 2.5 Flash |
+| OpenAI Compatible | [硅基流动（SiliconFlow）](https://cloud.siliconflow.cn/i/5SOAHcPz)各模型 |
+
+其他提供商和模型理论上兼容，但未经充分测试。
 
 ## 📄 License
 
