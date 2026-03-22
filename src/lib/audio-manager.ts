@@ -207,15 +207,23 @@ class AudioManager {
     try {
       let blob = this.cache.get(task.id)?.blob;
       if (!blob) {
-        // 1. 请求音频
-        const response = await fetch("/api/tts", {
-          method: "POST",
-          headers: this.buildTtsHeaders(),
-          body: JSON.stringify({
-            text: task.text,
-            voiceId: task.voiceId,
-          }),
-        });
+        // 1. 请求音频（30s 兜底超时，防止服务端永久挂起）
+        const fetchAbort = new AbortController();
+        const fetchTimeout = setTimeout(() => fetchAbort.abort(), 30000);
+        let response: Response;
+        try {
+          response = await fetch("/api/tts", {
+            method: "POST",
+            headers: this.buildTtsHeaders(),
+            body: JSON.stringify({
+              text: task.text,
+              voiceId: task.voiceId,
+            }),
+            signal: fetchAbort.signal,
+          });
+        } finally {
+          clearTimeout(fetchTimeout);
+        }
 
         if (!response.ok) {
           const body = await response.text().catch(() => "");

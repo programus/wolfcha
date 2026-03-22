@@ -135,36 +135,65 @@ export async function POST(req: NextRequest) {
 
     const tryEdgeTts = async (): Promise<NextResponse> => {
       const { voice: edgeTtsVoiceId, pitch, rate } = getEdgeTtsParams(normVoiceId);
-      const communicate = new Communicate(normText, {
-        voice: edgeTtsVoiceId,
-        connectionTimeout: 10000,
-        ...(pitch ? { pitch } : {}),
-        ...(rate  ? { rate  } : {}),
-      });
 
-      const chunks: Buffer[] = [];
-      // Wrap the streaming in a timeout promise (30 s total)
-      await Promise.race([
-        (async () => {
-          for await (const chunk of communicate.stream()) {
-            if (chunk.type === "audio" && chunk.data) {
-              chunks.push(chunk.data);
-            }
+      const MAX_ATTEMPTS = 3;
+      const ATTEMPT_TIMEOUT_MS = 8000;  // 每次合成超时
+      const CONNECTION_TIMEOUT_MS = 6000;
+      const RETRY_DELAY_MS = 300;
+
+      let lastError: Error = new Error("EdgeTTS: no attempts made");
+
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // 每次重试必须 new 一个新实例，stream() 只能调用一次
+        const communicate = new Communicate(normText, {
+          voice: edgeTtsVoiceId,
+          connectionTimeout: CONNECTION_TIMEOUT_MS,
+          ...(pitch ? { pitch } : {}),
+          ...(rate  ? { rate  } : {}),
+        });
+
+        const chunks: Buffer[] = [];
+        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+        try {
+          await Promise.race([
+            (async () => {
+              for await (const chunk of communicate.stream()) {
+                if (chunk.type === "audio" && chunk.data) {
+                  chunks.push(chunk.data);
+                }
+              }
+            })(),
+            new Promise<never>((_, reject) => {
+              timeoutHandle = setTimeout(
+                () => reject(new Error(`EdgeTTS synthesis timeout (${ATTEMPT_TIMEOUT_MS / 1000}s)`)),
+                ATTEMPT_TIMEOUT_MS
+              );
+            }),
+          ]);
+
+          if (chunks.length === 0) {
+            throw new Error("EdgeTTS: no audio data received");
           }
-        })(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("EdgeTTS synthesis timeout")), 30000)
-        ),
-      ]);
 
-      if (chunks.length === 0) {
-        throw new Error("EdgeTTS: no audio data received");
+          const audioBuffer = Buffer.concat(chunks);
+          return respondAudio(audioBuffer, {
+            "X-TTS-Provider": "edge-tts",
+            "X-Edge-Voice-Id": edgeTtsVoiceId,
+            ...(attempt > 1 ? { "X-Edge-Retry-Attempt": String(attempt) } : {}),
+          });
+        } catch (e) {
+          lastError = e instanceof Error ? e : new Error(String(e));
+          console.warn(`EdgeTTS attempt ${attempt}/${MAX_ATTEMPTS} failed: ${lastError.message}`);
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          }
+        } finally {
+          if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+        }
       }
-      const audioBuffer = Buffer.concat(chunks);
-      return respondAudio(audioBuffer, {
-        "X-TTS-Provider": "edge-tts",
-        "X-Edge-Voice-Id": edgeTtsVoiceId,
-      });
+
+      throw lastError;
     };
 
     // ------------------------------------------------------------------ minimax provider
