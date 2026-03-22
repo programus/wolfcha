@@ -2093,6 +2093,12 @@
       "parseSeatOnly": "解析失败-仅座位",
       "noTargets": "无可选目标",
       "randomPick": "随机选择"
+    },
+    "thinkingFilter": {
+      "bracketOpen": "【",
+      "bracketClose": "】",
+      "keywords": "分析,深度分析,综合分析,局势分析,策略分析,解析,推断,推理,判断,评估,考量,考虑,思考,思考过程,内心独白,内心想法,内心,内部分析,内部推理,策略,计划,决策,行动方案,总结,最终汇总,最终总结,最终分析,最终判断,结论,回顾,旁白",
+      "singleWordBlacklist": "system,user,assistant,analyze,analysis,thinking,thought,reasoning,sanitize,reflection,deliberation,conclusion,observation,judgment,action,decision,strategy,planning"
     }
   },
   "api": {

@@ -61,6 +61,45 @@ function sanitizeModelArtifacts(text: string): string {
     .trim();
 }
 
+/**
+ * Returns true if the segment looks like a thinking/reasoning artifact that
+ * should be hidden from the player. Covers two patterns:
+ *
+ * 1. Bracket-wrapped keyword label: e.g. 【分析】 or 【思考：内容】 (zh) / [Analysis] (en)
+ *    — the segment starts with the locale-specific open-bracket followed by a
+ *    known thinking keyword and then either the close-bracket or a colon.
+ *
+ * 2. Single ASCII word from a blacklist: e.g. "system", "analyze"
+ *    — some models leak an internal role/command token as a lone word.
+ */
+function isThinkingSegment(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const { t } = getI18n();
+  const bracketOpen = t.raw("gameMaster.thinkingFilter.bracketOpen") as string;
+  const bracketClose = t.raw("gameMaster.thinkingFilter.bracketClose") as string;
+  const keywords = (t.raw("gameMaster.thinkingFilter.keywords") as string).split(",");
+  const singleWordBlacklist = (t.raw("gameMaster.thinkingFilter.singleWordBlacklist") as string).split(",");
+
+  // Escape special regex chars in bracket/keyword strings
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const keywordsPattern = keywords.map(esc).join("|");
+
+  // Matches segments starting with 【keyword】 or 【keyword： or 【keyword:
+  const bracketStartRegex = new RegExp(
+    `^${esc(bracketOpen)}(${keywordsPattern})([：:]|${esc(bracketClose)})`
+  );
+  if (bracketStartRegex.test(trimmed)) return true;
+
+  // Single ASCII word in blacklist ("system", "analyze", etc.)
+  if (/^[a-zA-Z]+$/.test(trimmed) && singleWordBlacklist.includes(trimmed.toLowerCase())) {
+    return true;
+  }
+
+  return false;
+}
+
 function sanitizeSeatMentions(text: string, players: Player[]): string {
   if (!text) return text;
   const totalSeats = players.length;
@@ -1101,7 +1140,7 @@ export async function generateAISpeechSegmentsStream(
   const parser = new StreamingSpeechParser({
     onSegmentReceived: (segment, index) => {
       const sanitized = sanitizeSeatMentions(sanitizeModelArtifacts(segment), state.players);
-      if (!emittedSegments.has(sanitized)) {
+      if (sanitized && !isThinkingSegment(sanitized) && !emittedSegments.has(sanitized)) {
         emittedSegments.add(sanitized);
         options.onSegmentReceived?.(sanitized, emittedCount++);
       }
@@ -1271,10 +1310,10 @@ export async function generateAISpeechSegmentsStream(
       return emittedList;
     }
 
-    // Sanitize all segments
-    const sanitizedSegments = segments.map((s) =>
-      sanitizeSeatMentions(sanitizeModelArtifacts(s), state.players)
-    );
+    // Sanitize all segments and filter out any thinking artifacts
+    const sanitizedSegments = segments
+      .map((s) => sanitizeSeatMentions(sanitizeModelArtifacts(s), state.players))
+      .filter((s) => s && !isThinkingSegment(s));
 
     await aiLogger.log({
       type: "speech",

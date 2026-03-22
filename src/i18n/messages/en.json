@@ -2093,6 +2093,12 @@
       "parseSeatOnly": "Parse failed - seat only",
       "noTargets": "No available targets",
       "randomPick": "Random pick"
+},
+    "thinkingFilter": {
+      "bracketOpen": "[",
+      "bracketClose": "]",
+      "keywords": "Analysis,Deep Analysis,Comprehensive Analysis,Strategy Analysis,Reasoning,Judgment,Evaluation,Assessment,Thinking,Thought Process,Inner Thoughts,Inner Monologue,Strategy,Plan,Decision,Action Plan,Summary,Final Summary,Final Analysis,Final Judgment,Conclusion,Review,Observation,Reflection,Deliberation",
+      "singleWordBlacklist": "system,user,assistant,analyze,analysis,thinking,thought,reasoning,sanitize,reflection,deliberation,conclusion,observation,judgment,action,decision,strategy,planning"
     }
   },
   "api": {
