@@ -993,8 +993,8 @@
     "daySpeech": {
       "speakOrder": {
         "first": "你是第1个发言，其他人都还没发言。",
-        "last": "你是最后一个发言（第{speakOrder}/{totalSpeakers}个），所有人都已经发言完毕，不要说\"等X号发言\"或\"看X号接下来怎么说\"这类话。",
-        "middle": "你是第{speakOrder}/{totalSpeakers}个发言。已发言: {spokenList}；未发言: {unspokenList}。注意：已发言玩家不会再发言，不要向他们提问、要求他们回答、或说「我想听X号怎么说」这类期待其再次发言的话，只能引用/分析其内容。",
+        "last": "你是本轮最后一个发言，其余{spokenCount}人均已发言完毕，不要说\"等X号发言\"或\"看X号接下来怎么说\"这类话。",
+        "middle": "你是本轮第{speakOrder}个发言。已发言（{spokenCount}人）：{spokenList}；未发言（{remainingCount}人）：{unspokenList}。注意：已发言玩家不会再发言，不要向他们提问、要求他们回答、或说「我想听X号怎么说」这类期待其再次发言的话，只能引用/分析其内容。",
         "skipped": "{seat}(过麦)"
       },
       "campaign": {

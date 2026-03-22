@@ -141,7 +141,7 @@ export class DaySpeechPhase extends GamePhase {
     if (isFirstSpeaker) {
       speakOrderHint = t("prompts.daySpeech.speakOrder.first");
     } else if (isLastSpeaker) {
-      speakOrderHint = t("prompts.daySpeech.speakOrder.last", { speakOrder, totalSpeakers });
+      speakOrderHint = t("prompts.daySpeech.speakOrder.last", { speakOrder, totalSpeakers, spokenCount: speakOrder - 1 });
     } else {
       // 标记已过麦的玩家（在顺序中应该已发言但实际没有发言记录）
       const spokenList = spokenPlayers.map((p) => {
@@ -150,7 +150,7 @@ export class DaySpeechPhase extends GamePhase {
         return hasSpoken ? seatLabel : t("prompts.daySpeech.speakOrder.skipped", { seat: seatLabel });
       }).join(t("common.listSeparator"));
       const unspokenList = unspokenPlayers.map((p) => t("ui.seatNumber", { seat: p.seat + 1 })).join(t("common.listSeparator"));
-      speakOrderHint = t("prompts.daySpeech.speakOrder.middle", { speakOrder, totalSpeakers, spokenList: spokenList || t("common.none"), unspokenList: unspokenList || t("common.none") });
+      speakOrderHint = t("prompts.daySpeech.speakOrder.middle", { speakOrder, totalSpeakers, spokenList: spokenList || t("common.none"), unspokenList: unspokenList || t("common.none"), spokenCount: speakOrder - 1, remainingCount: totalSpeakers - speakOrder });
     }
 
     const nonCandidateList = state.players
