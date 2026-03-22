@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ALL_MODELS, AVAILABLE_MODELS, type ProviderName } from "@/types/game";
 import { resolveProviderConfig, isOpenAICompatibleProvider, fetchOpenAICompatibleModels } from "@/lib/provider-config";
 
-// API 调用超时时间（毫秒）
-const API_TIMEOUT_MS = 300000;
+// API 调用超时时间（毫秒），可通过环境变量 API_TIMEOUT_MS 覆盖，默认 3 分钟
+const API_TIMEOUT_MS = parseInt(process.env.API_TIMEOUT_MS ?? "180000", 10);
 
 async function getProviderForModel(model: string): Promise<ProviderName | null> {
   // Check openai-compatible models first (env var or fetched from /models API) —

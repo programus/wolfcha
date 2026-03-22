@@ -76,6 +76,7 @@ Create a `.env.docker` file with the required environment variables (see the tab
 | `OPENAI_COMPATIBLE_MODELS` | Comma-separated model IDs; leave empty to auto-fetch from `/models` | _(auto-fetch)_ |
 | `ZENMUX_API_KEY` | ZenMux aggregator API key | — |
 | `DASHSCOPE_API_KEY` | Alibaba Cloud DashScope API key | — |
+| `API_TIMEOUT_MS` | AI API call timeout in milliseconds | `180000` (3 minutes) |
 | `NEXT_PUBLIC_SHOW_DEVTOOLS` | Show dev tools in non-production builds | `"true"` |
 
 ### Notes on AI Providers

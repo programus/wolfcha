@@ -76,6 +76,7 @@ services:
 | `OPENAI_COMPATIBLE_MODELS` | 模型 ID 列表，逗号分隔；留空则自动从 `/models` 拉取 | 自动获取 |
 | `ZENMUX_API_KEY` | ZenMux 聚合 API Key | — |
 | `DASHSCOPE_API_KEY` | 阿里云百炼 API Key | — |
+| `API_TIMEOUT_MS` | AI 接口调用超时时间（毫秒） | `180000`（3 分钟） |
 | `NEXT_PUBLIC_SHOW_DEVTOOLS` | 非生产环境是否显示开发工具 | `"true"` |
 
 ### 关于 AI 提供商的说明
