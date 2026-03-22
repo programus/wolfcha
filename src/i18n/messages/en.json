@@ -773,6 +773,7 @@
   "roleReveal": {
     "cardTitle": "Role card",
     "cardHint": "View privately",
+    "scenarioLabel": "Game Scenario",
     "dealing": {
       "title": "Dealing role card...",
       "subtitle": "Please wait",
@@ -1243,7 +1244,8 @@
     "title": "Role Composition",
     "wolfFaction": "Werewolf Faction",
     "godFaction": "God Roles",
-    "villagerFaction": "Villagers"
+    "villagerFaction": "Villagers",
+    "scenarioLabel": "Game Scenario"
   },
   "page": {
     "voteHelp": "How to vote?",

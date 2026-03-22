@@ -773,6 +773,7 @@
   "roleReveal": {
     "cardTitle": "身份牌",
     "cardHint": "请独自查看",
+    "scenarioLabel": "本局场景",
     "dealing": {
       "title": "正在发放身份牌…",
       "subtitle": "请稍等",
@@ -1243,7 +1244,8 @@
     "title": "本局角色配置",
     "wolfFaction": "狼人阵营",
     "godFaction": "神职阵营",
-    "villagerFaction": "村民"
+    "villagerFaction": "村民",
+    "scenarioLabel": "本局场景"
   },
   "page": {
     "voteHelp": "怎么投票？",

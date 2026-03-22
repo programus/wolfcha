@@ -13,13 +13,14 @@ import {
   IdiotIcon,
   NightIcon,
 } from "@/components/icons/FlatIcons";
-import type { Phase, Player } from "@/types/game";
+import type { Phase, Player, GameScenario } from "@/types/game";
 import { useTranslations } from "next-intl";
 
 interface RoleRevealOverlayProps {
   open: boolean;
   player: Player;
   phase: Phase;
+  scenario?: GameScenario;
   onContinue: () => void;
 }
 
@@ -143,7 +144,7 @@ function getNextStepText(role: Player["role"], phase: Phase, t: ReturnType<typeo
   return t("roleReveal.nextStep.default");
 }
 
-export function RoleRevealOverlay({ open, player, phase, onContinue }: RoleRevealOverlayProps) {
+export function RoleRevealOverlay({ open, player, phase, scenario, onContinue }: RoleRevealOverlayProps) {
   const t = useTranslations();
   const meta = getRoleMeta(player.role, t);
   const NextStepIcon = NightIcon;
@@ -308,6 +309,24 @@ export function RoleRevealOverlay({ open, player, phase, onContinue }: RoleRevea
                           </div>
                         </div>
                       </div>
+
+                      {scenario && (
+                        <>
+                          <motion.div
+                            className="mt-4 h-px w-full"
+                            initial={{ opacity: 0, scaleX: 0.85 }}
+                            animate={{ opacity: 1, scaleX: 1 }}
+                            transition={{ delay: 0.15 }}
+                            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)" }}
+                          />
+                          <div className="mt-4 rounded-2xl p-4" style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <div className="text-xs font-bold tracking-wider text-white/60 uppercase">
+                              🏗️ {t("roleReveal.scenarioLabel")} · {scenario.title}
+                            </div>
+                            <div className="mt-1.5 text-sm text-white/75 leading-relaxed">{scenario.description}</div>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <div className="px-6 py-5" style={{ background: "rgba(0,0,0,0.25)" }}>

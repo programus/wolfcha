@@ -1423,6 +1423,7 @@ export default function Home() {
                 open={isRoleRevealOpen}
                 player={humanPlayer}
                 phase={gameState.phase}
+                scenario={gameState.scenario}
                 onContinue={async () => {
                   setIsRoleRevealOpen(false);
                   await continueAfterRoleReveal();
@@ -1466,7 +1467,7 @@ export default function Home() {
                     <span className="text-xs uppercase tracking-wider opacity-60">Day</span>
                     <span className="font-serif text-lg font-bold">{String(gameState.day).padStart(2, '0')}</span>
                   </div>
-                  <RoleCompositionChip players={gameState.players} />
+                  <RoleCompositionChip players={gameState.players} scenario={gameState.scenario} />
                   {gameState.badge.holderSeat !== null && (
                     <div className="wc-topbar__item">
                       <span className="text-xs uppercase tracking-wider opacity-60">{t("page.badgeLabel")}</span>

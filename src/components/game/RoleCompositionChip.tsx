@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import type { Player, Role } from "@/types/game";
+import type { Player, Role, GameScenario } from "@/types/game";
 
 const WOLF_ROLES: Role[] = ["Werewolf", "WhiteWolfKing"];
 const GOD_ROLES: Role[] = ["Seer", "Witch", "Hunter", "Guard", "Idiot"];
@@ -28,9 +28,10 @@ const VIL_BG   = "rgba(128, 128, 128, 0.26)";
 
 interface RoleCompositionChipProps {
   players: Player[];
+  scenario?: GameScenario;
 }
 
-export function RoleCompositionChip({ players }: RoleCompositionChipProps) {
+export function RoleCompositionChip({ players, scenario }: RoleCompositionChipProps) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -191,6 +192,20 @@ export function RoleCompositionChip({ players }: RoleCompositionChipProps) {
                   </div>
                   <span className="font-mono text-(--text-muted)">×{villagerCount}</span>
                 </div>
+              </div>
+            </>
+          )}
+
+          {/* Scenario */}
+          {scenario && (
+            <>
+              <div className="border-t border-(--border-color)" />
+              <div className="px-3 py-2">
+                <div className="text-xs font-semibold text-(--text-muted) mb-1">
+                  🏗️ {t("roleComposition.scenarioLabel")}
+                </div>
+                <div className="text-sm font-semibold text-(--text-primary) leading-snug">{scenario.title}</div>
+                <div className="mt-0.5 text-xs text-(--text-muted) leading-relaxed">{scenario.description}</div>
               </div>
             </>
           )}
