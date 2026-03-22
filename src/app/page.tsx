@@ -232,8 +232,8 @@ export default function Home() {
 
   useEffect(() => {
     if (gameState.phase !== "GAME_END") return;
-    setAiVoiceEnabled(false);
-  }, [gameState.phase, setAiVoiceEnabled]);
+    audioManager.clearQueue();
+  }, [gameState.phase]);
 
   const handleViewAnalysis = useCallback(() => {
     const basePath = slug ? `/${slug}` : "";
@@ -1308,7 +1308,6 @@ export default function Home() {
               humanName={humanName}
               setHumanName={setHumanName}
               onStart={(options) => {
-                setAiVoiceEnabled(false);
                 startGame({ ...(options ?? {}), isGenshinMode, isSpectatorMode });
               }}
               onAbort={restartGame}

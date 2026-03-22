@@ -1,4 +1,4 @@
-import { getMinimaxApiKey, getMinimaxGroupId, hasMinimaxKey, isCustomKeyEnabled } from "@/lib/api-keys";
+import { getMinimaxApiKey, getMinimaxGroupId, isCustomKeyEnabled } from "@/lib/api-keys";
 
 export interface AudioTask {
   id: string; // unique message id
@@ -19,7 +19,7 @@ class AudioManager {
   private currentAudio: HTMLAudioElement | null = null;
   private state: PlayState = "idle";
   private cache = new Map<string, { blob: Blob; durationMs?: number }>();
-  private enabled = isCustomKeyEnabled() && hasMinimaxKey();
+  private enabled = false;
   
   // Callbacks
   private onPlayStart: ((playerId: string) => void) | null = null;
@@ -77,10 +77,6 @@ class AudioManager {
 
   private async prefetchTask(task: AudioTask) {
     if (this.cache.has(task.id)) return;
-    if (!isCustomKeyEnabled() || !hasMinimaxKey()) {
-      this.setEnabled(false);
-      return;
-    }
 
     const response = await fetch("/api/tts", {
       method: "POST",
@@ -168,10 +164,6 @@ class AudioManager {
     if (!this.enabled) return;
     if (this.state !== "idle") return;
     if (this.queue.length === 0) return;
-    if (!isCustomKeyEnabled() || !hasMinimaxKey()) {
-      this.setEnabled(false);
-      return;
-    }
 
     const task = this.queue.shift();
     if (!task) return;

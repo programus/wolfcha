@@ -1,19 +1,26 @@
 /**
  * 旁白语音生成脚本 (Multi-language Support)
- * 使用 MiniMax TTS API 生成游戏旁白语音并保存到本地
- * 
+ * 支持 MiniMax 和 Edge TTS 两个 provider。
+ *
  * 使用方法:
- * 1. 确保 .env.local 中配置了 MINIMAX_API_KEY 和 MINIMAX_GROUP_ID
- * 2. 运行: npx tsx scripts/generate-narrator-audio.ts [locale]
- *    - npx tsx scripts/generate-narrator-audio.ts        # Generate all languages
- *    - npx tsx scripts/generate-narrator-audio.ts zh     # Generate Chinese only
- *    - npx tsx scripts/generate-narrator-audio.ts en     # Generate English only
+ *   npx tsx scripts/generate-narrator-audio.ts [locale] [--provider minimax|edge-tts]
+ *
+ * 示例:
+ *   npx tsx scripts/generate-narrator-audio.ts              # 全语言，默认 minimax
+ *   npx tsx scripts/generate-narrator-audio.ts zh           # 仅中文，默认 minimax
+ *   npx tsx scripts/generate-narrator-audio.ts en           # 仅英文，默认 minimax
+ *   npx tsx scripts/generate-narrator-audio.ts --provider edge-tts        # 全语言，edge-tts
+ *   npx tsx scripts/generate-narrator-audio.ts zh --provider edge-tts     # 仅中文，edge-tts
+ *
+ * MiniMax provider 需要在 .env.local 中配置 MINIMAX_API_KEY 和 MINIMAX_GROUP_ID。
+ * Edge TTS provider 无需任何 API 密钥（使用微软 Edge 免费 TTS 服务）。
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as https from "node:https";
 import { URL } from "node:url";
+import { Communicate } from "edge-tts-universal";
 
 // 手动加载 .env.local 环境变量
 function loadEnvFile(filePath: string): void {
@@ -41,10 +48,16 @@ function loadEnvFile(filePath: string): void {
 
 loadEnvFile(path.join(process.cwd(), ".env.local"));
 
-// Voice IDs for each language
+// MiniMax voice IDs for each language (narrator)
 const NARRATOR_VOICE_IDS: Record<string, string> = {
   zh: "Chinese (Mandarin)_Mature_Woman",
   en: "Serene_Woman",
+};
+
+// Edge TTS voice IDs for each language (narrator)
+const NARRATOR_EDGE_TTS_VOICE_IDS: Record<string, string> = {
+  zh: "zh-CN-XiaoxiaoNeural",
+  en: "en-GB-SoniaNeural",
 };
 
 // Chinese narrator texts
@@ -116,6 +129,24 @@ const NARRATOR_TEXTS_BY_LOCALE: Record<string, Record<string, string>> = {
 };
 
 const BASE_OUTPUT_DIR = path.join(process.cwd(), "public", "audio", "narrator");
+
+/** Synthesize text using Edge TTS and return a MP3 Buffer. */
+async function requestEdgeTTS(text: string, voiceId: string): Promise<Buffer> {
+  const communicate = new Communicate(text, { voice: voiceId, connectionTimeout: 15000 });
+  const chunks: Buffer[] = [];
+  await Promise.race([
+    (async () => {
+      for await (const chunk of communicate.stream()) {
+        if (chunk.type === "audio" && chunk.data) chunks.push(chunk.data);
+      }
+    })(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("EdgeTTS synthesis timeout")), 60000)
+    ),
+  ]);
+  if (chunks.length === 0) throw new Error("EdgeTTS: no audio data received");
+  return Buffer.concat(chunks);
+}
 
 async function requestMiniMaxTTS(text: string, voiceId: string): Promise<Buffer> {
   const apiKey = process.env.MINIMAX_API_KEY;
@@ -223,17 +254,19 @@ async function requestMiniMaxTTS(text: string, voiceId: string): Promise<Buffer>
   });
 }
 
-async function generateNarratorAudioForLocale(locale: string) {
+async function generateNarratorAudioForLocale(locale: string, provider: string) {
   const texts = NARRATOR_TEXTS_BY_LOCALE[locale];
-  const voiceId = NARRATOR_VOICE_IDS[locale];
-  
+  const voiceId = provider === "edge-tts"
+    ? NARRATOR_EDGE_TTS_VOICE_IDS[locale]
+    : NARRATOR_VOICE_IDS[locale];
+
   if (!texts || !voiceId) {
     console.error(`[ERROR] Unknown locale: ${locale}`);
     return { success: 0, fail: 0 };
   }
-  
+
   const outputDir = path.join(BASE_OUTPUT_DIR, locale);
-  
+
   // 确保输出目录存在
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -241,7 +274,7 @@ async function generateNarratorAudioForLocale(locale: string) {
   }
 
   const entries = Object.entries(texts);
-  console.log(`\n[${locale.toUpperCase()}] Generating ${entries.length} narrator audio files...`);
+  console.log(`\n[${locale.toUpperCase()}] Generating ${entries.length} narrator audio files... (provider: ${provider})`);
   console.log(`Voice ID: ${voiceId}\n`);
 
   let successCount = 0;
@@ -249,7 +282,7 @@ async function generateNarratorAudioForLocale(locale: string) {
 
   for (const [key, text] of entries) {
     const outputPath = path.join(outputDir, `${key}.mp3`);
-    
+
     // 检查文件是否已存在
     if (fs.existsSync(outputPath)) {
       console.log(`[SKIP] ${key}: File already exists`);
@@ -259,13 +292,15 @@ async function generateNarratorAudioForLocale(locale: string) {
 
     try {
       console.log(`[GEN] ${key}: "${text}"`);
-      const audioBuffer = await requestMiniMaxTTS(text, voiceId);
+      const audioBuffer = provider === "edge-tts"
+        ? await requestEdgeTTS(text, voiceId)
+        : await requestMiniMaxTTS(text, voiceId);
       fs.writeFileSync(outputPath, audioBuffer);
       console.log(`[OK] ${key}: Saved (${audioBuffer.length} bytes)`);
       successCount++;
-      
-      // 添加延迟避免 API 限流
-      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 添加延迟避免 API 限流 (minimax) 或过快请求 (edge-tts)
+      await new Promise(resolve => setTimeout(resolve, provider === "edge-tts" ? 300 : 500));
     } catch (error) {
       console.error(`[FAIL] ${key}: ${error}`);
       failCount++;
@@ -275,21 +310,22 @@ async function generateNarratorAudioForLocale(locale: string) {
   return { success: successCount, fail: failCount };
 }
 
-async function generateAllNarratorAudio(targetLocale?: string) {
-  const localesToGenerate = targetLocale 
-    ? [targetLocale] 
+async function generateAllNarratorAudio(targetLocale?: string, provider = "minimax") {
+  const localesToGenerate = targetLocale
+    ? [targetLocale]
     : Object.keys(NARRATOR_TEXTS_BY_LOCALE);
-  
+
   console.log(`\n========================================`);
   console.log(`Narrator Audio Generation`);
   console.log(`Target locales: ${localesToGenerate.join(", ")}`);
+  console.log(`Provider: ${provider}`);
   console.log(`========================================`);
-  
+
   let totalSuccess = 0;
   let totalFail = 0;
-  
+
   for (const locale of localesToGenerate) {
-    const result = await generateNarratorAudioForLocale(locale);
+    const result = await generateNarratorAudioForLocale(locale, provider);
     totalSuccess += result.success;
     totalFail += result.fail;
   }
@@ -302,8 +338,17 @@ async function generateAllNarratorAudio(targetLocale?: string) {
 }
 
 // Parse command line arguments
+// Usage: npx tsx scripts/generate-narrator-audio.ts [locale] [--provider minimax|edge-tts]
 const args = process.argv.slice(2);
-const targetLocale = args[0]; // Optional: "zh" or "en"
+const providerFlag = args.find((a) => a === "--provider");
+const provider = providerFlag ? args[args.indexOf("--provider") + 1] ?? "minimax" : "minimax";
+const targetLocale = args.filter((a) => !a.startsWith("--") && a !== provider)[0];
+
+if (provider !== "minimax" && provider !== "edge-tts") {
+  console.error(`[ERROR] Invalid provider: ${provider}`);
+  console.error(`Available providers: minimax, edge-tts`);
+  process.exit(1);
+}
 
 if (targetLocale && !NARRATOR_TEXTS_BY_LOCALE[targetLocale]) {
   console.error(`[ERROR] Invalid locale: ${targetLocale}`);
@@ -312,4 +357,4 @@ if (targetLocale && !NARRATOR_TEXTS_BY_LOCALE[targetLocale]) {
 }
 
 // 运行脚本
-generateAllNarratorAudio(targetLocale).catch(console.error);
+generateAllNarratorAudio(targetLocale, provider).catch(console.error);

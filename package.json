@@ -27,6 +27,7 @@
     "ai-json-fixer": "^0.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "edge-tts-universal": "1.4.0",
     "framer-motion": "^12.24.0",
     "html-to-image": "^1.11.11",
     "jotai": "^2.16.1",

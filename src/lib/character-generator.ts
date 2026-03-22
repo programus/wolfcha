@@ -414,7 +414,7 @@ const buildCharacterFromCombined = (
   if (!sanitizedPersona) return null;
 
   const voiceId = resolveVoiceId(
-    sanitizedPersona.voiceId,
+    (typeof p.voiceId === "string" && p.voiceId.trim()) || sanitizedPersona.voiceId,
     sanitizedPersona.gender,
     sanitizedPersona.age,
     locale

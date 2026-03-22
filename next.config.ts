@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   // For Vercel deployment, this can be removed or overridden via VERCEL env var
   output: "standalone",
   reactCompiler: true,
+  // Exclude edge-tts-universal and its transitive native deps from webpack bundling.
+  // When loaded natively by Node, ws catches the missing 'bufferutil' module and falls
+  // back to its pure-JS mask/unmask path instead of receiving a broken empty stub.
+  serverExternalPackages: ["bufferutil", "utf-8-validate", "edge-tts-universal"],
   async rewrites() {
     return [
       { source: "/zh", destination: "/" },

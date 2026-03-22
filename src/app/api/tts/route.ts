@@ -3,10 +3,20 @@ import type { IncomingHttpHeaders } from "node:http";
 import * as https from "node:https";
 import { URL } from "node:url";
 import * as zlib from "node:zlib";
-import { DEFAULT_VOICE_ID } from "@/lib/voice-constants";
+import { Communicate } from "edge-tts-universal";
+import { DEFAULT_VOICE_ID, getEdgeTtsParams } from "@/lib/voice-constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Parse the TTS_PROVIDERS env var into an ordered list of provider names. */
+function getTtsProviders(): string[] {
+  const raw = process.env.TTS_PROVIDERS || "minimax";
+  return raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,48 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing text or voiceId" }, { status: 400 });
     }
 
-    const headerApiKey = req.headers.get("x-minimax-api-key")?.trim();
-    const headerGroupId = req.headers.get("x-minimax-group-id")?.trim();
-    const apiKey = headerApiKey || process.env.MINIMAX_API_KEY;
-    const groupId = headerGroupId || process.env.MINIMAX_GROUP_ID;
-
-    if (!apiKey || !groupId) {
-      console.error("Missing MiniMax credentials");
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
-    }
-
-    // MiniMax T2A V2 API Endpoint
-    // 参考文档：https://platform.minimaxi.com/document/T2A%20V2
-    const baseUrlFromEnv = process.env.MINIMAX_API_BASE_URL;
-    const primaryBaseUrl = baseUrlFromEnv || "https://api.minimax.chat";
-
-    const candidateBaseUrls = [primaryBaseUrl];
-    if (!baseUrlFromEnv) {
-      // 自动兜底另一个域名，避免因为平台（minimax.chat vs minimaxi.com）差异导致连不通
-      candidateBaseUrls.push(
-        primaryBaseUrl.includes("minimaxi.com")
-          ? "https://api.minimax.chat"
-          : "https://api.minimaxi.com"
-      );
-    }
-
-    const payload = {
-      model: process.env.MINIMAX_TTS_MODEL || "speech-01-turbo",
-      text: normText,
-      stream: false, // 暂时不使用流式，简化前端处理
-      voice_setting: {
-        voice_id: normVoiceId,
-        speed: 1.0,
-        vol: 1.0,
-        pitch: 0,
-      },
-      audio_setting: {
-        sample_rate: 32000,
-        bitrate: 128000,
-        format: "mp3",
-        channel: 1,
-      },
-    };
+    // ------------------------------------------------------------------ helpers
 
     const requestBuffer = async (inputUrl: string, init: {
       method: "GET" | "POST";
@@ -104,16 +73,11 @@ export async function POST(req: NextRequest) {
                   else if (e.includes("deflate")) body = zlib.inflateSync(raw);
                 }
               } catch (decompressErr) {
-                // 解压失败就回退到原始内容，并在上层用可读错误定位
-                console.error("MiniMax response decompress failed:", decompressErr);
+                console.error("Response decompress failed:", decompressErr);
                 body = raw;
               }
 
-              resolve({
-                statusCode: res.statusCode || 0,
-                headers: res.headers,
-                body,
-              });
+              resolve({ statusCode: res.statusCode || 0, headers: res.headers, body });
             });
           }
         );
@@ -136,31 +100,16 @@ export async function POST(req: NextRequest) {
 
     const sniffAudioMime = (b: Buffer): { mime: string | null; reason?: string } => {
       if (!b || b.length < 4) return { mime: null, reason: "empty_or_too_short" };
-
-      // WAV: RIFF....WAVE
       if (b.length >= 12 && b.slice(0, 4).toString("ascii") === "RIFF" && b.slice(8, 12).toString("ascii") === "WAVE") {
         return { mime: "audio/wav" };
       }
-
-      // OGG
-      if (b.slice(0, 4).toString("ascii") === "OggS") {
-        return { mime: "audio/ogg" };
-      }
-
-      // MP3: ID3 tag or frame sync 0xFFE?
-      if (b.slice(0, 3).toString("ascii") === "ID3") {
-        return { mime: "audio/mpeg" };
-      }
-      if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) {
-        return { mime: "audio/mpeg" };
-      }
-
-      // If it looks like text/json, treat as non-audio
+      if (b.slice(0, 4).toString("ascii") === "OggS") return { mime: "audio/ogg" };
+      if (b.slice(0, 3).toString("ascii") === "ID3") return { mime: "audio/mpeg" };
+      if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return { mime: "audio/mpeg" };
       const head = b.slice(0, 64).toString("utf8").trim();
       if (head.startsWith("{") || head.startsWith("[") || head.toLowerCase().includes("error")) {
         return { mime: null, reason: "looks_like_text_or_json" };
       }
-
       return { mime: null, reason: "unknown_format" };
     };
 
@@ -169,16 +118,10 @@ export async function POST(req: NextRequest) {
       if (!sniff.mime) {
         const preview = b.slice(0, 400).toString("utf8");
         return NextResponse.json(
-          {
-            error: "TTS audio is not in a supported format.",
-            reason: sniff.reason,
-            byteLength: b.length,
-            preview,
-          },
+          { error: "TTS audio is not in a supported format.", reason: sniff.reason, byteLength: b.length, preview },
           { status: 502 }
         );
       }
-
       return new NextResponse(bufferToArrayBuffer(b), {
         headers: {
           "Content-Type": sniff.mime,
@@ -188,196 +131,223 @@ export async function POST(req: NextRequest) {
       });
     };
 
+    // ------------------------------------------------------------------ edge-tts provider
+
+    const tryEdgeTts = async (): Promise<NextResponse> => {
+      const { voice: edgeTtsVoiceId, pitch, rate } = getEdgeTtsParams(normVoiceId);
+      const communicate = new Communicate(normText, {
+        voice: edgeTtsVoiceId,
+        connectionTimeout: 10000,
+        ...(pitch ? { pitch } : {}),
+        ...(rate  ? { rate  } : {}),
+      });
+
+      const chunks: Buffer[] = [];
+      // Wrap the streaming in a timeout promise (30 s total)
+      await Promise.race([
+        (async () => {
+          for await (const chunk of communicate.stream()) {
+            if (chunk.type === "audio" && chunk.data) {
+              chunks.push(chunk.data);
+            }
+          }
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("EdgeTTS synthesis timeout")), 30000)
+        ),
+      ]);
+
+      if (chunks.length === 0) {
+        throw new Error("EdgeTTS: no audio data received");
+      }
+      const audioBuffer = Buffer.concat(chunks);
+      return respondAudio(audioBuffer, {
+        "X-TTS-Provider": "edge-tts",
+        "X-Edge-Voice-Id": edgeTtsVoiceId,
+      });
+    };
+
+    // ------------------------------------------------------------------ minimax provider
+
     const pickFallbackVoiceId = (badVoiceId: string) => {
       const v = badVoiceId.toLowerCase();
       if (v.startsWith("female") || v.includes("female")) return DEFAULT_VOICE_ID.female;
       return DEFAULT_VOICE_ID.male;
     };
 
-    const requestMiniMax = async (voiceIdForRequest: string) => {
-      payload.voice_setting.voice_id = voiceIdForRequest;
-      let response: { statusCode: number; headers: IncomingHttpHeaders; body: Buffer } | null = null;
-      let lastError: unknown = null;
+    const tryMiniMax = async (): Promise<NextResponse> => {
+      const headerApiKey = req.headers.get("x-minimax-api-key")?.trim();
+      const headerGroupId = req.headers.get("x-minimax-group-id")?.trim();
+      const apiKey = headerApiKey || process.env.MINIMAX_API_KEY;
+      const groupId = headerGroupId || process.env.MINIMAX_GROUP_ID;
 
-      for (const baseUrl of candidateBaseUrls) {
-        const url = `${baseUrl}/v1/t2a_v2?GroupId=${encodeURIComponent(groupId)}`;
-
-        try {
-          response = await requestBuffer(url, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-              GroupId: groupId,
-              "Accept-Encoding": "identity",
-            },
-            body: JSON.stringify(payload),
-            timeoutMs: 30000,
-          });
-          break;
-        } catch (e) {
-          lastError = e;
-          continue;
-        }
+      if (!apiKey || !groupId) {
+        throw new Error("MiniMax credentials not configured (MINIMAX_API_KEY / MINIMAX_GROUP_ID)");
       }
 
-      if (!response) {
-        const attempted = candidateBaseUrls.join(", ");
-        console.error("MiniMax fetch failed. attempted base urls:", attempted, lastError);
-      }
-
-      return response;
-    };
-
-    let usedVoiceId = normVoiceId;
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const response = await requestMiniMax(usedVoiceId);
-
-      if (!response) {
-        return NextResponse.json(
-          {
-            error:
-              "MiniMax fetch failed (connect timeout / network). Please set MINIMAX_API_BASE_URL to the correct domain (https://api.minimaxi.com or https://api.minimax.chat) and ensure your network can reach it.",
-            attemptedBaseUrls: candidateBaseUrls,
-          },
-          { status: 502 }
+      // 参考文档：https://platform.minimaxi.com/document/T2A%20V2
+      const baseUrlFromEnv = process.env.MINIMAX_API_BASE_URL;
+      const primaryBaseUrl = baseUrlFromEnv || "https://api.minimax.chat";
+      const candidateBaseUrls = [primaryBaseUrl];
+      if (!baseUrlFromEnv) {
+        candidateBaseUrls.push(
+          primaryBaseUrl.includes("minimaxi.com")
+            ? "https://api.minimax.chat"
+            : "https://api.minimaxi.com"
         );
       }
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        const errorText = response.body.toString("utf8");
-        console.error("MiniMax API Error:", response.statusCode, errorText);
-        return NextResponse.json({ error: `MiniMax API error: ${errorText}` }, { status: response.statusCode || 502 });
-      }
+      const payload = {
+        model: process.env.MINIMAX_TTS_MODEL || "speech-01-turbo",
+        text: normText,
+        stream: false,
+        voice_setting: { voice_id: normVoiceId, speed: 1.0, vol: 1.0, pitch: 0 },
+        audio_setting: { sample_rate: 32000, bitrate: 128000, format: "mp3", channel: 1 },
+      };
 
-      const contentType = response.headers["content-type"];
-
-      if (typeof contentType === "string" && contentType.includes("application/json")) {
-        let json: any;
-        try {
-          json = JSON.parse(response.body.toString("utf8"));
-        } catch (e) {
-          const preview = response.body.slice(0, 600).toString("utf8");
-          console.error("MiniMax JSON parse failed:", e, { preview });
-          return NextResponse.json(
-            { error: "MiniMax JSON parse failed", preview },
-            { status: 502 }
+      const requestMiniMaxRaw = async (voiceIdForRequest: string) => {
+        payload.voice_setting.voice_id = voiceIdForRequest;
+        let response: { statusCode: number; headers: IncomingHttpHeaders; body: Buffer } | null = null;
+        let lastErr: unknown = null;
+        for (const baseUrl of candidateBaseUrls) {
+          const url = `${baseUrl}/v1/t2a_v2?GroupId=${encodeURIComponent(groupId)}`;
+          try {
+            response = await requestBuffer(url, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                GroupId: groupId,
+                "Accept-Encoding": "identity",
+              },
+              body: JSON.stringify(payload),
+              timeoutMs: 30000,
+            });
+            break;
+          } catch (e) {
+            lastErr = e;
+            continue;
+          }
+        }
+        if (!response) {
+          throw new Error(
+            `MiniMax fetch failed (connect timeout / network). Attempted: ${candidateBaseUrls.join(", ")}. ` +
+            `Set MINIMAX_API_BASE_URL to the correct domain. Last error: ${lastErr}`
           );
         }
+        return response;
+      };
 
-        if (json.base_resp && json.base_resp.status_code !== 0) {
-          const code = Number(json.base_resp.status_code);
-          const msg = String(json.base_resp.status_msg || "");
+      let usedVoiceId = normVoiceId;
 
-          if (code === 2054 && attempt === 0) {
-            const fallback = pickFallbackVoiceId(usedVoiceId);
-            if (fallback !== usedVoiceId) {
-              usedVoiceId = fallback;
-              continue;
-            }
-          }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = await requestMiniMaxRaw(usedVoiceId);
 
-          console.error("MiniMax base_resp error:", {
-            status_code: code,
-            status_msg: msg,
-            voiceId: usedVoiceId,
-            textPreview: String(normText).slice(0, 200),
-          });
-          return NextResponse.json(
-            {
-              error: "MiniMax base_resp error",
-              status_code: code,
-              status_msg: msg,
-              voiceId: usedVoiceId,
-              textPreview: String(normText).slice(0, 200),
-            },
-            { status: 502 }
-          );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          const errorText = response.body.toString("utf8");
+          console.error("MiniMax API Error:", response.statusCode, errorText);
+          throw new Error(`MiniMax API error ${response.statusCode}: ${errorText.slice(0, 400)}`);
         }
 
-        const dataStr: unknown =
-          (typeof json.data === "string" ? json.data : undefined) ??
-          json.data?.audio ??
-          json.data?.data ??
-          json.audio?.data ??
-          json.audio_data;
+        const contentType = response.headers["content-type"];
 
-        const audioUrl: unknown = json.audio?.url ?? json.data?.url ?? json.url;
-
-        if (typeof audioUrl === "string" && audioUrl.startsWith("http")) {
-          const audioResp = await requestBuffer(audioUrl, {
-            method: "GET",
-            headers: {
-              "Accept-Encoding": "identity",
-            },
-            timeoutMs: 30000,
-          });
-          if (audioResp.statusCode < 200 || audioResp.statusCode >= 300) {
-            return NextResponse.json({ error: `MiniMax audio url fetch failed: ${audioResp.statusCode}` }, { status: 502 });
+        if (typeof contentType === "string" && contentType.includes("application/json")) {
+          let json: any;
+          try {
+            json = JSON.parse(response.body.toString("utf8"));
+          } catch (e) {
+            const preview = response.body.slice(0, 600).toString("utf8");
+            throw new Error(`MiniMax JSON parse failed: ${e}. Preview: ${preview}`);
           }
 
-          return respondAudio(audioResp.body, {
-            "X-Minimax-Voice-Id-Requested": normVoiceId,
-            "X-Minimax-Voice-Id-Used": usedVoiceId,
-          });
-        }
-
-        if (typeof dataStr === "string" && dataStr.trim()) {
-          const t = dataStr.trim();
-
-          const maybeB64 = t.startsWith("data:") ? t.split(",").slice(1).join(",") : t;
-          const looksLikeBase64 = /[+/=]/.test(maybeB64);
-          const looksLikeHex = !looksLikeBase64 && /^[0-9a-fA-F]+$/.test(t) && t.length % 2 === 0;
-
-          let buffer: Buffer;
-          let altBuffer: Buffer | null = null;
-
-          if (looksLikeHex) {
-            buffer = Buffer.from(t, "hex");
-            try {
-              altBuffer = Buffer.from(maybeB64, "base64");
-            } catch {
-              altBuffer = null;
+          if (json.base_resp && json.base_resp.status_code !== 0) {
+            const code = Number(json.base_resp.status_code);
+            const msg = String(json.base_resp.status_msg || "");
+            if (code === 2054 && attempt === 0) {
+              const fallback = pickFallbackVoiceId(usedVoiceId);
+              if (fallback !== usedVoiceId) { usedVoiceId = fallback; continue; }
             }
-          } else {
-            buffer = Buffer.from(maybeB64, "base64");
-            if (/^[0-9a-fA-F]+$/.test(t) && t.length % 2 === 0) {
-              try {
-                altBuffer = Buffer.from(t, "hex");
-              } catch {
-                altBuffer = null;
+            throw new Error(`MiniMax base_resp error ${code}: ${msg}`);
+          }
+
+          const dataStr: unknown =
+            (typeof json.data === "string" ? json.data : undefined) ??
+            json.data?.audio ?? json.data?.data ?? json.audio?.data ?? json.audio_data;
+
+          const audioUrl: unknown = json.audio?.url ?? json.data?.url ?? json.url;
+
+          if (typeof audioUrl === "string" && audioUrl.startsWith("http")) {
+            const audioResp = await requestBuffer(audioUrl, { method: "GET", headers: { "Accept-Encoding": "identity" }, timeoutMs: 30000 });
+            if (audioResp.statusCode < 200 || audioResp.statusCode >= 300) {
+              throw new Error(`MiniMax audio URL fetch failed: ${audioResp.statusCode}`);
+            }
+            return respondAudio(audioResp.body, {
+              "X-TTS-Provider": "minimax",
+              "X-Minimax-Voice-Id-Requested": normVoiceId,
+              "X-Minimax-Voice-Id-Used": usedVoiceId,
+            });
+          }
+
+          if (typeof dataStr === "string" && dataStr.trim()) {
+            const t = dataStr.trim();
+            const maybeB64 = t.startsWith("data:") ? t.split(",").slice(1).join(",") : t;
+            const looksLikeBase64 = /[+/=]/.test(maybeB64);
+            const looksLikeHex = !looksLikeBase64 && /^[0-9a-fA-F]+$/.test(t) && t.length % 2 === 0;
+            let buffer: Buffer;
+            let altBuffer: Buffer | null = null;
+            if (looksLikeHex) {
+              buffer = Buffer.from(t, "hex");
+              try { altBuffer = Buffer.from(maybeB64, "base64"); } catch { altBuffer = null; }
+            } else {
+              buffer = Buffer.from(maybeB64, "base64");
+              if (/^[0-9a-fA-F]+$/.test(t) && t.length % 2 === 0) {
+                try { altBuffer = Buffer.from(t, "hex"); } catch { altBuffer = null; }
               }
             }
+            const primarySniff = sniffAudioMime(buffer);
+            if (!primarySniff.mime && altBuffer && sniffAudioMime(altBuffer).mime) buffer = altBuffer;
+            return respondAudio(buffer, {
+              "X-TTS-Provider": "minimax",
+              "X-Minimax-Voice-Id-Requested": normVoiceId,
+              "X-Minimax-Voice-Id-Used": usedVoiceId,
+            });
           }
-
-          const primarySniff = sniffAudioMime(buffer);
-          if (!primarySniff.mime && altBuffer) {
-            const altSniff = sniffAudioMime(altBuffer);
-            if (altSniff.mime) {
-              buffer = altBuffer;
-            }
-          }
-
-          return respondAudio(buffer, {
-            "X-Minimax-Voice-Id-Requested": normVoiceId,
-            "X-Minimax-Voice-Id-Used": usedVoiceId,
-          });
         }
+
+        return respondAudio(response.body, {
+          "X-TTS-Provider": "minimax",
+          "X-Minimax-Voice-Id-Requested": normVoiceId,
+          "X-Minimax-Voice-Id-Used": usedVoiceId,
+        });
       }
 
-      return respondAudio(response.body, {
-        "X-Minimax-Voice-Id-Requested": normVoiceId,
-        "X-Minimax-Voice-Id-Used": usedVoiceId,
-      });
+      throw new Error(`MiniMax voiceId retry exhausted. voiceId: ${usedVoiceId}`);
+    };
+
+    // ------------------------------------------------------------------ provider loop
+
+    const providers = getTtsProviders();
+    const errors: string[] = [];
+
+    for (const provider of providers) {
+      try {
+        if (provider === "edge-tts") {
+          return await tryEdgeTts();
+        } else if (provider === "minimax") {
+          return await tryMiniMax();
+        } else {
+          console.warn(`TTS: unknown provider '${provider}', skipping`);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`TTS provider '${provider}' failed:`, msg);
+        errors.push(`[${provider}] ${msg}`);
+        // continue to next provider
+      }
     }
 
     return NextResponse.json(
-      {
-        error: "MiniMax voiceId retry exhausted",
-        voiceId: usedVoiceId,
-        textPreview: String(normText).slice(0, 200),
-      },
+      { error: "All TTS providers failed", providers, errors },
       { status: 502 }
     );
 
@@ -386,3 +356,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+
