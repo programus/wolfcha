@@ -84,8 +84,15 @@ export const getRoleKnowHow = (role: string): string => {
  * Provides context-aware tactical suggestions without being overly restrictive.
  */
 export const buildSituationalStrategy = (state: GameState, player: Player): string => {
+  const { t } = getI18n();
   const lines: string[] = [];
-  
+
+  const pushTips = (content: string) => {
+    lines.push("<situational_tips>");
+    lines.push(content);
+    lines.push("</situational_tips>");
+  };
+
   if (player.role === "Seer") {
     const checks = state.nightActions.seerHistory || [];
     if (checks.length === 0) {
@@ -94,90 +101,63 @@ export const buildSituationalStrategy = (state: GameState, player: Player): stri
     
     const hasWolfCheck = checks.some(c => c.isWolf);
     const hasGoodCheck = checks.some(c => !c.isWolf);
-    const latestCheck = checks[checks.length - 1];
-    const latestTarget = state.players.find(p => p.seat === latestCheck.targetSeat);
-    
-    lines.push("<situational_tips>");
+
     if (hasWolfCheck && state.day === 1) {
-      lines.push("【当前情境】你首验查杀！这是强信息。");
-      lines.push("【可选策略】");
-      lines.push("- 跳身份带节奏，报出查杀的座位号");
-      lines.push("- 给出今日归票建议");
-      lines.push("- 准备好应对可能的狼人对跳");
+      pushTips(t.raw("promptUtils.situationalStrategy.seer.wolfCheckDay1") as string);
     } else if (hasGoodCheck && !hasWolfCheck) {
-      lines.push("【当前情境】你目前只有金水（好人验），信息量有限。");
-      lines.push("【可选策略】");
-      lines.push("- 潜水观察，等待更多信息后再跳");
-      lines.push("- 或跳身份报金水，争取话语权");
-      lines.push("- 观察是否有人对跳，判断真假预言家");
+      pushTips(t.raw("promptUtils.situationalStrategy.seer.goodCheckOnly") as string);
     } else if (hasWolfCheck && state.day > 1) {
-      lines.push("【当前情境】你有查杀记录。");
-      lines.push("【可选策略】");
-      lines.push("- 继续推进查杀目标出局");
-      lines.push("- 结合新的查验结果分析局势");
+      pushTips(t.raw("promptUtils.situationalStrategy.seer.wolfCheckLater") as string);
     }
-    lines.push("</situational_tips>");
   }
-  
+
   if (isWolfRole(player.role)) {
     const aliveWolves = state.players.filter(p => isWolfRole(p.role) && p.alive);
     const isLastWolf = aliveWolves.length === 1;
-    
-    lines.push("<situational_tips>");
-    if (isLastWolf) {
-      lines.push("【当前情境】你是最后一只狼！");
-      lines.push("【可选策略】");
-      lines.push("- 低调发言，避免被集火");
-      lines.push("- 引导好人内斗");
-      lines.push("- 寻找机会翻盘");
-    } else if (state.day === 1) {
-      lines.push("【当前情境】首日发言，建立信任很关键。");
-      lines.push("【可选策略】");
-      lines.push("- 像好人一样分析局势");
-      lines.push("- 不要过早站边或暴露狼视角");
-      lines.push("- 可以适当质疑可疑发言");
-    }
-    lines.push("</situational_tips>");
-  }
-  
-  // Badge speech: if multiple wolf teammates are candidates, warn not to duplicate-claim Seer
-  if (isWolfRole(player.role) && state.phase === "DAY_BADGE_SPEECH") {
-    const { t } = getI18n();
-    const candidates = Array.isArray(state.badge?.candidates) ? state.badge.candidates : [];
-    const wolfTeammatesInCandidates = state.players.filter(
-      p => isWolfRole(p.role) && p.alive && p.playerId !== player.playerId && candidates.includes(p.seat)
-    );
-    if (wolfTeammatesInCandidates.length > 0) {
-      const separator = t("promptUtils.gameContext.listSeparator");
-      const teammateList = wolfTeammatesInCandidates
-        .map(p => t("promptUtils.gameContext.seatLabel", { seat: p.seat + 1 }))
-        .join(separator);
-      const raw = t.raw("promptUtils.situationalStrategy.wolfBadgeCampaign") as string;
-      lines.push(raw.replace("{teammates}", teammateList));
+
+    if (state.phase === "DAY_BADGE_SPEECH") {
+      const candidates = Array.isArray(state.badge?.candidates) ? state.badge.candidates : [];
+      const wolfTeammatesInCandidates = state.players.filter(
+        p => isWolfRole(p.role) && p.alive && p.playerId !== player.playerId && candidates.includes(p.seat)
+      );
+
+      let content: string;
+      if (isLastWolf) {
+        content = t.raw("promptUtils.situationalStrategy.wolf.lastWolf") as string;
+      } else if (wolfTeammatesInCandidates.length > 0) {
+        const separator = t("promptUtils.gameContext.listSeparator");
+        const teammateList = wolfTeammatesInCandidates
+          .map(p => t("promptUtils.gameContext.seatLabel", { seat: p.seat + 1 }))
+          .join(separator);
+        content = (t.raw("promptUtils.situationalStrategy.wolfBadgeCampaign") as string).replace("{teammates}", teammateList);
+      } else {
+        content = t.raw("promptUtils.situationalStrategy.wolfBadgeCampaignAlone") as string;
+      }
+      pushTips(content);
+    } else {
+      if (isLastWolf) {
+        pushTips(t.raw("promptUtils.situationalStrategy.wolf.lastWolf") as string);
+      } else if (state.day === 1) {
+        pushTips(t.raw("promptUtils.situationalStrategy.wolf.day1") as string);
+      }
     }
   }
 
   if (player.role === "Witch") {
     const hasHeal = !state.roleAbilities.witchHealUsed;
     const hasPoison = !state.roleAbilities.witchPoisonUsed;
-    
-    if (!hasHeal && !hasPoison) {
-      return "";
-    }
-    
-    lines.push("<situational_tips>");
-    lines.push("【当前情境】你是女巫。");
+
+    if (!hasHeal && !hasPoison) return "";
+
     if (hasHeal && hasPoison) {
-      lines.push("- 解药和毒药都还在，谨慎使用");
+      pushTips(t.raw("promptUtils.situationalStrategy.witch.bothPotions") as string);
     } else if (hasHeal) {
-      lines.push("- 解药还在，留给关键好人");
-    } else if (hasPoison) {
-      lines.push("- 毒药还在，留给确认的狼人");
+      pushTips(t.raw("promptUtils.situationalStrategy.witch.healOnly") as string);
+    } else {
+      pushTips(t.raw("promptUtils.situationalStrategy.witch.poisonOnly") as string);
     }
-    lines.push("- 你知道谁被刀了，这是重要信息");
-    lines.push("</situational_tips>");
   }
-  
+
   return lines.join("\n");
 };
 

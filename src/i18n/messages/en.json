@@ -1852,7 +1852,22 @@
       }
     },
     "situationalStrategy": {
-      "wolfBadgeCampaign": "<situational_tips>\n【Badge Campaign Coordination】Wolf teammate(s) among the candidates: {teammates}\nBefore speaking, check the transcript of earlier speeches to see if any wolf teammate has already claimed Seer:\n- If a wolf teammate has already claimed Seer → strongly avoid also claiming Seer. Two candidates claiming the same role signals a wolf pocket and severely damages both your credibility. Run as Villager, Hunter, or any other role (not Seer).\n- If no wolf teammate has claimed Seer yet (or you are the first candidate to speak) → decide normally whether to hard-claim Seer per your usual strategy.\n- If despite a teammate already claiming Seer you still choose to claim it → make sure your check route, badge-transfer plan, and other details differ noticeably from your teammate's story to avoid being exposed by overlapping accounts.\n</situational_tips>"
+      "seer": {
+        "wolfCheckDay1": "[Current Situation] Your first check found a werewolf — this is strong information.\n[Strategic Options]\n- Reveal your identity and lead with the kill; announce the target's seat number\n- Give a recommended vote target for today\n- Be ready to handle a possible counter-claim from a werewolf",
+        "goodCheckOnly": "[Current Situation] You only have a confirmed innocent (gold water) so far; limited information.\n[Strategic Options]\n- Lay low and observe; reveal later when you have more data\n- Or reveal now to report the confirmed innocent and gain influence\n- Watch for counter-claims to judge who is the real Seer",
+        "wolfCheckLater": "[Current Situation] You have a kill check on record.\n[Strategic Options]\n- Keep pushing to eliminate the confirmed werewolf\n- Incorporate new check results into your analysis"
+      },
+      "wolf": {
+        "lastWolf": "[Current Situation] You are the last wolf alive!\n[Strategic Options]\n- Keep a low profile to avoid being targeted\n- Steer the village into fighting each other\n- Look for an opportunity to turn the game around",
+        "day1": "[Current Situation] Day 1 speech — establishing trust is critical.\n[Strategic Options]\n- Analyze the game like a villager\n- Avoid taking early sides or revealing the wolf perspective\n- You may gently question suspicious statements"
+      },
+      "witch": {
+        "bothPotions": "[Current Situation] You are the Witch.\n- Both potions are still available; use them wisely\n- You know who was attacked tonight — this is key information",
+        "healOnly": "[Current Situation] You are the Witch.\n- Your heal potion is still available; save it for a key villager\n- You know who was attacked tonight — this is key information",
+        "poisonOnly": "[Current Situation] You are the Witch.\n- Your poison potion is still available; save it for a confirmed werewolf\n- You know who was attacked tonight — this is key information"
+      },
+      "wolfBadgeCampaign": "【Badge Campaign Coordination】Wolf teammate(s) among the candidates: {teammates}\nCheck the transcript of earlier speeches to see if any wolf teammate has already claimed Seer:\n- If no wolf teammate has claimed Seer yet (or you are the first candidate to speak) → strongly recommend hard-claiming Seer; controlling the Seer role gives the wolf team full command over information output and is the most advantageous play.\n- If a wolf teammate has already claimed Seer → strongly avoid also claiming Seer. Two candidates claiming the same role signals a wolf pocket and severely damages both your credibility. Run as Villager, Hunter, or any other role (not Seer).\n- If despite a teammate already claiming Seer you still choose to claim it → make sure your check route, badge-transfer plan, and other details differ noticeably from your teammate's story to avoid being exposed by overlapping accounts.",
+      "wolfBadgeCampaignAlone": "【Badge Campaign Strategy】No wolf teammates among the candidates — you are the only wolf running.\nStrongly recommend hard-claiming Seer: exclusively occupying the Seer role gives the wolf team full control over information output and is the most advantageous campaign strategy.\nCheck the transcript to decide your approach:\n- If no one has claimed Seer yet → claim it immediately, seize the Seer identity and control the information.\n- If someone has already claimed Seer → still strongly recommend counter-claiming, presenting a different check route and badge-transfer plan to create a genuine vs. fake Seer standoff, confusing the village and undermining the real Seer's credibility."
     }
   },
   "devConsole": {
