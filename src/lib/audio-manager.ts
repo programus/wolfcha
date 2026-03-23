@@ -1,5 +1,22 @@
 import { getMinimaxApiKey, getMinimaxGroupId, isCustomKeyEnabled } from "@/lib/api-keys";
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, "")           // 代码块
+    .replace(/`[^`]*`/g, "")                   // 行内代码
+    .replace(/^#{1,6}\s+/gm, "")              // 标题 # ## ###
+    .replace(/\*\*\*(.+?)\*\*\*/g, "$1")      // ***粗斜体***
+    .replace(/\*\*(.+?)\*\*/g, "$1")          // **粗体**
+    .replace(/\*(.+?)\*/g, "$1")              // *斜体*
+    .replace(/~~(.+?)~~/g, "$1")              // ~~删除线~~
+    .replace(/^[*\-+]\s+/gm, "")              // 无序列表
+    .replace(/^\d+\.\s+/gm, "")              // 有序列表
+    .replace(/^>\s+/gm, "")                   // 引用块
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // [链接](url) → 保留文字
+    .replace(/\n{2,}/g, "\n")                 // 多余空行
+    .trim();
+}
+
 export interface AudioTask {
   id: string; // unique message id
   text: string;
@@ -82,7 +99,7 @@ class AudioManager {
     const response = await fetch("/api/tts", {
       method: "POST",
       headers: this.buildTtsHeaders(),
-      body: JSON.stringify({ text: task.text, voiceId: task.voiceId }),
+      body: JSON.stringify({ text: stripMarkdown(task.text), voiceId: task.voiceId }),
     });
 
     if (!response.ok) {
@@ -216,7 +233,7 @@ class AudioManager {
             method: "POST",
             headers: this.buildTtsHeaders(),
             body: JSON.stringify({
-              text: task.text,
+              text: stripMarkdown(task.text),
               voiceId: task.voiceId,
             }),
             signal: fetchAbort.signal,
