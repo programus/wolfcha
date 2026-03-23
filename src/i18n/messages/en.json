@@ -995,7 +995,7 @@
       "speakOrder": {
         "first": "You speak first. No one has spoken yet.",
         "last": "You are the last speaker this round. The other {spokenCount} players have all spoken. Don't say things like \"let's see what Seat X says\".",
-        "middle": "You are speaker {speakOrder} this round. Already spoken ({spokenCount}): {spokenList}. Yet to speak ({remainingCount}): {unspokenList}. Note: players who have already spoken will NOT speak again—do not question them, ask for clarification, or say things like \"I'd like to hear Seat X's view\"; only analyze their statements.",
+        "middle": "You are speaker {speakOrder} this round. {spokenList} have spoken ({spokenCount} total); {unspokenList} have yet to speak ({remainingCount} total). Note: players who have already spoken will NOT speak again—do not question them, ask for clarification, or say things like \"I'd like to hear Seat X's view\"; only analyze their statements.",
         "skipped": "{seat}(skipped)"
       },
       "campaign": {
