@@ -14,10 +14,12 @@ interface SoundSettingsSectionProps {
   isSoundEnabled: boolean;
   isAiVoiceEnabled: boolean;
   isAutoAdvanceDialogueEnabled?: boolean;
+  isMemoryFadeEnabled?: boolean;
   onBgmVolumeChange: (value: number) => void;
   onSoundEnabledChange: (value: boolean) => void;
   onAiVoiceEnabledChange: (value: boolean) => void;
   onAutoAdvanceDialogueEnabledChange?: (value: boolean) => void;
+  onMemoryFadeEnabledChange?: (value: boolean) => void;
 }
 
 interface SettingsModalProps {
@@ -27,11 +29,13 @@ interface SettingsModalProps {
   isSoundEnabled: boolean;
   isAiVoiceEnabled: boolean;
   isAutoAdvanceDialogueEnabled: boolean;
+  isMemoryFadeEnabled: boolean;
   gameState: GameState;
   onBgmVolumeChange: (value: number) => void;
   onSoundEnabledChange: (value: boolean) => void;
   onAiVoiceEnabledChange: (value: boolean) => void;
   onAutoAdvanceDialogueEnabledChange: (value: boolean) => void;
+  onMemoryFadeEnabledChange: (value: boolean) => void;
   // Exit game functionality
   isGameInProgress?: boolean;
   onExitGame?: () => void;
@@ -42,10 +46,12 @@ export function SoundSettingsSection({
   isSoundEnabled,
   isAiVoiceEnabled,
   isAutoAdvanceDialogueEnabled = false,
+  isMemoryFadeEnabled = true,
   onBgmVolumeChange,
   onSoundEnabledChange,
   onAiVoiceEnabledChange,
   onAutoAdvanceDialogueEnabledChange,
+  onMemoryFadeEnabledChange,
 }: SoundSettingsSectionProps) {
   const t = useTranslations();
   const volumePercent = Math.round(bgmVolume * 100);
@@ -99,6 +105,19 @@ export function SoundSettingsSection({
           />
         </div>
       )}
+
+      {onMemoryFadeEnabledChange && (
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-[var(--text-primary)]">{t("settings.audio.memoryFade")}</div>
+            <div className="text-xs text-[var(--text-muted)]">{t("settings.audio.memoryFadeDesc")}</div>
+          </div>
+          <Switch
+            checked={isMemoryFadeEnabled}
+            onCheckedChange={onMemoryFadeEnabledChange}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -110,11 +129,13 @@ export function SettingsModal({
   isSoundEnabled,
   isAiVoiceEnabled,
   isAutoAdvanceDialogueEnabled,
+  isMemoryFadeEnabled,
   gameState,
   onBgmVolumeChange,
   onSoundEnabledChange,
   onAiVoiceEnabledChange,
   onAutoAdvanceDialogueEnabledChange,
+  onMemoryFadeEnabledChange,
   isGameInProgress = false,
   onExitGame,
 }: SettingsModalProps) {
@@ -295,10 +316,12 @@ export function SettingsModal({
               isSoundEnabled={isSoundEnabled}
               isAiVoiceEnabled={isAiVoiceEnabled}
               isAutoAdvanceDialogueEnabled={isAutoAdvanceDialogueEnabled}
+              isMemoryFadeEnabled={isMemoryFadeEnabled}
               onBgmVolumeChange={onBgmVolumeChange}
               onSoundEnabledChange={onSoundEnabledChange}
               onAiVoiceEnabledChange={onAiVoiceEnabledChange}
               onAutoAdvanceDialogueEnabledChange={onAutoAdvanceDialogueEnabledChange}
+              onMemoryFadeEnabledChange={onMemoryFadeEnabledChange}
             />
 
             <div className="rounded-lg border-2 border-[var(--border-color)] bg-[var(--bg-secondary)] p-3 space-y-3">

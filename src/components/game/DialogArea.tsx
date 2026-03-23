@@ -286,6 +286,8 @@ interface DialogAreaProps {
   wolfConsultText?: string;
   wolfConsultTarget?: number | null;
   onWolfConsultRequest?: () => void;
+  // Memory fade
+  isMemoryFadeEnabled?: boolean;
 }
 
 // 等待状态动画组件已移除，与当前简洁风格不符
@@ -368,6 +370,33 @@ function NightActionStatus({ phase, humanRole }: { phase: string; humanRole?: st
   );
 }
 
+// Stable seed from a string (gameId etc.)
+function computeSeed(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return Math.abs(h) % 9973;
+}
+
+// Single overlay for the entire history content area.
+// Circle count scales with message count and day count to prevent density dilution.
+// circle Xvw radius = always a perfect circle regardless of container aspect ratio.
+// cy biased toward top (old msgs) via power distribution; bottom 20% stays clear.
+function buildHistoryOverlayBlobs(seed: number, msgCount: number, dayCount: number): string {
+  let s = seed;
+  const rng = (): number => { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return (s >>> 0) / 2147483647; };
+  // ~1.2 circles per message + 8 per past day, capped at 180
+  const count = Math.min(Math.round(msgCount * 1.2 + Math.max(0, dayCount - 1) * 8) + 24, 180);
+  const layers: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const cx  = Math.round(rng() * 100);
+    const cy  = Math.round(Math.pow(rng(), 1.6) * 80); // 0–80%, biased toward top
+    const r   = Math.round(4 + rng() * 10);            // 4–14vw
+    const op  = (0.60 + rng() * 0.35).toFixed(2);      // 0.60–0.95
+    layers.push(`radial-gradient(circle ${r}vw at ${cx}% ${cy}%, rgba(42,22,8,${op}) 38%, transparent 100%)`);
+  }
+  return layers.join(',');
+}
+
 export function DialogArea({
   gameState,
   humanPlayer,
@@ -405,6 +434,7 @@ export function DialogArea({
   wolfConsultText,
   wolfConsultTarget,
   onWolfConsultRequest,
+  isMemoryFadeEnabled = true,
 }: DialogAreaProps) {
   const t = useTranslations();
   const isGenshinMode = !!gameState.isGenshinMode;
@@ -505,6 +535,21 @@ export function DialogArea({
       (m) => !(m.isSystem && isTurnPromptSystemMessage(m.content, t))
     );
   }, [gameState.messages, t]);
+
+  // Bucket msgCount to every 5 messages so the overlay only re-rasterizes
+  // when content grows noticeably, not on every new message during streaming.
+  const overlayBackground = useMemo(() => {
+    if (!isMemoryFadeEnabled) return undefined;
+    const bucketMsg = Math.floor(visibleMessages.length / 5) * 5;
+    return buildHistoryOverlayBlobs(
+      computeSeed(gameState.gameId || '0'),
+      bucketMsg,
+      gameState.day ?? 1,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMemoryFadeEnabled, Math.floor(visibleMessages.length / 5), gameState.day, gameState.gameId]);
+
+
 
   // 获取当前发言者信息
   const currentSpeaker = useMemo(() => {
@@ -1149,7 +1194,16 @@ export function DialogArea({
               }}
               layoutScroll
             >
-              <div ref={historyContentRef}>
+              <div ref={historyContentRef} className="relative">
+                {/* Memory fade: single overlay covering all history content, scrolls with messages.
+                    Circles use vw radius so they stay round at any container height.
+                    cy biased toward top (old msgs); bottom 20% always clear (today's msgs). */}
+                {isMemoryFadeEnabled && overlayBackground && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ zIndex: 5, background: overlayBackground }}
+                  />
+                )}
                 <LayoutGroup>
                   <AnimatePresence initial={false}>
                     {visibleMessages.map((msg, index) => {
@@ -1180,7 +1234,7 @@ export function DialogArea({
                 </LayoutGroup>
               </div>
             </motion.div>
-            
+
             {/* 新消息提示：底部分割线 + 文案 */}
             <AnimatePresence>
               {unreadCount > 0 && !isAtBottom && (

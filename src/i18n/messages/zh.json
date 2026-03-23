@@ -222,7 +222,9 @@
       "aiVoice": "角色配音",
       "aiVoiceDescription": "控制 AI 角色语音播放",
       "autoAdvance": "自动播放对话",
-      "autoAdvanceDesc": "开启后将自动推进对话，无需按回车"
+      "autoAdvanceDesc": "开启后将自动推进对话，无需按回车",
+      "memoryFade": "记忆模糊",
+      "memoryFadeDesc": "开启后过往天数的对话将逐渐模糊，当天记录保持清晰"
     },
     "logs": {
       "title": "日志",

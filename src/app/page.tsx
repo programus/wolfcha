@@ -177,8 +177,8 @@ export default function Home() {
     wolfConsultTarget,
     handleWolfConsultRequest,
   } = useGameLogic();
-  const { settings, setBgmVolume, setSoundEnabled, setAiVoiceEnabled, setGenshinMode, setSpectatorMode, setAutoAdvanceDialogueEnabled } = useSettings();
-  const { bgmVolume, isSoundEnabled, isAiVoiceEnabled, isGenshinMode, isSpectatorMode, isAutoAdvanceDialogueEnabled } = settings;
+  const { settings, setBgmVolume, setSoundEnabled, setAiVoiceEnabled, setGenshinMode, setSpectatorMode, setAutoAdvanceDialogueEnabled, setMemoryFadeEnabled } = useSettings();
+  const { bgmVolume, isSoundEnabled, isAiVoiceEnabled, isGenshinMode, isSpectatorMode, isAutoAdvanceDialogueEnabled, isMemoryFadeEnabled } = settings;
   const shouldUseAiVoice = isSoundEnabled && isAiVoiceEnabled && bgmVolume > 0;
   
   // Exit game functionality - use restartGame which properly handles all state resets
@@ -1342,10 +1342,12 @@ export default function Home() {
               isSoundEnabled={isSoundEnabled}
               isAiVoiceEnabled={isAiVoiceEnabled}
               isAutoAdvanceDialogueEnabled={isAutoAdvanceDialogueEnabled}
+              isMemoryFadeEnabled={isMemoryFadeEnabled}
               onBgmVolumeChange={setBgmVolume}
               onSoundEnabledChange={setSoundEnabled}
               onAiVoiceEnabledChange={setAiVoiceEnabled}
               onAutoAdvanceDialogueEnabledChange={setAutoAdvanceDialogueEnabled}
+              onMemoryFadeEnabledChange={setMemoryFadeEnabled}
             />
           </motion.div>
         ) : (
@@ -1627,6 +1629,7 @@ export default function Home() {
                       wolfConsultText={wolfConsultText}
                       wolfConsultTarget={wolfConsultTarget}
                       onWolfConsultRequest={handleWolfConsultRequest}
+                      isMemoryFadeEnabled={isMemoryFadeEnabled}
                     />
 
                     {/* 移动端玩家条 */}
@@ -1760,11 +1763,13 @@ export default function Home() {
         isSoundEnabled={isSoundEnabled}
         isAiVoiceEnabled={isAiVoiceEnabled}
         isAutoAdvanceDialogueEnabled={isAutoAdvanceDialogueEnabled}
+        isMemoryFadeEnabled={isMemoryFadeEnabled}
         gameState={gameState}
         onBgmVolumeChange={setBgmVolume}
         onSoundEnabledChange={setSoundEnabled}
         onAiVoiceEnabledChange={setAiVoiceEnabled}
         onAutoAdvanceDialogueEnabledChange={setAutoAdvanceDialogueEnabled}
+        onMemoryFadeEnabledChange={setMemoryFadeEnabled}
         isGameInProgress={gameInProgress}
         onExitGame={restartGame}
       />

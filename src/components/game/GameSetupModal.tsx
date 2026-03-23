@@ -41,10 +41,12 @@ interface GameSetupModalProps {
   isSoundEnabled: boolean;
   isAiVoiceEnabled: boolean;
   isAutoAdvanceDialogueEnabled: boolean;
+  isMemoryFadeEnabled: boolean;
   onBgmVolumeChange: (value: number) => void;
   onSoundEnabledChange: (value: boolean) => void;
   onAiVoiceEnabledChange: (value: boolean) => void;
   onAutoAdvanceDialogueEnabledChange: (value: boolean) => void;
+  onMemoryFadeEnabledChange: (value: boolean) => void;
 }
 
 
@@ -63,10 +65,12 @@ export function GameSetupModal({
   isSoundEnabled,
   isAiVoiceEnabled,
   isAutoAdvanceDialogueEnabled,
+  isMemoryFadeEnabled,
   onBgmVolumeChange,
   onSoundEnabledChange,
   onAiVoiceEnabledChange,
   onAutoAdvanceDialogueEnabledChange,
+  onMemoryFadeEnabledChange,
 }: GameSetupModalProps) {
   const t = useTranslations();
 
@@ -209,10 +213,12 @@ export function GameSetupModal({
               isSoundEnabled={isSoundEnabled}
               isAiVoiceEnabled={isAiVoiceEnabled}
               isAutoAdvanceDialogueEnabled={isAutoAdvanceDialogueEnabled}
+              isMemoryFadeEnabled={isMemoryFadeEnabled}
               onBgmVolumeChange={onBgmVolumeChange}
               onSoundEnabledChange={onSoundEnabledChange}
               onAiVoiceEnabledChange={onAiVoiceEnabledChange}
               onAutoAdvanceDialogueEnabledChange={onAutoAdvanceDialogueEnabledChange}
+              onMemoryFadeEnabledChange={onMemoryFadeEnabledChange}
             />
           </div>
         </div>

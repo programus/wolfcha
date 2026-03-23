@@ -32,6 +32,10 @@ export function useSettings() {
     setSettings((prev) => ({ ...prev, isSpectatorMode: value }));
   }, [setSettings]);
 
+  const setMemoryFadeEnabled = useCallback((value: boolean) => {
+    setSettings((prev) => ({ ...prev, isMemoryFadeEnabled: value }));
+  }, [setSettings]);
+
   return {
     settings,
     isLoaded,
@@ -41,5 +45,6 @@ export function useSettings() {
     setGenshinMode,
     setSpectatorMode,
     setAutoAdvanceDialogueEnabled,
+    setMemoryFadeEnabled,
   };
 }

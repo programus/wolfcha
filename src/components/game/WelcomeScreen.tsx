@@ -204,10 +204,12 @@ interface WelcomeScreenProps {
   isSoundEnabled: boolean;
   isAiVoiceEnabled: boolean;
   isAutoAdvanceDialogueEnabled: boolean;
+  isMemoryFadeEnabled: boolean;
   onBgmVolumeChange: (value: number) => void;
   onSoundEnabledChange: (value: boolean) => void;
   onAiVoiceEnabledChange: (value: boolean) => void;
   onAutoAdvanceDialogueEnabledChange: (value: boolean) => void;
+  onMemoryFadeEnabledChange: (value: boolean) => void;
 }
 
 export function WelcomeScreen({
@@ -224,10 +226,12 @@ export function WelcomeScreen({
   isSoundEnabled,
   isAiVoiceEnabled,
   isAutoAdvanceDialogueEnabled,
+  isMemoryFadeEnabled,
   onBgmVolumeChange,
   onSoundEnabledChange,
   onAiVoiceEnabledChange,
   onAutoAdvanceDialogueEnabledChange,
+  onMemoryFadeEnabledChange,
 }: WelcomeScreenProps) {
   const t = useTranslations();
   const { locale } = useAppLocale();
@@ -582,10 +586,12 @@ export function WelcomeScreen({
           isSoundEnabled={isSoundEnabled}
           isAiVoiceEnabled={isAiVoiceEnabled}
           isAutoAdvanceDialogueEnabled={isAutoAdvanceDialogueEnabled}
+          isMemoryFadeEnabled={isMemoryFadeEnabled}
           onBgmVolumeChange={onBgmVolumeChange}
           onSoundEnabledChange={onSoundEnabledChange}
           onAiVoiceEnabledChange={onAiVoiceEnabledChange}
           onAutoAdvanceDialogueEnabledChange={onAutoAdvanceDialogueEnabledChange}
+          onMemoryFadeEnabledChange={onMemoryFadeEnabledChange}
         />
 
         <CustomCharacterModal
