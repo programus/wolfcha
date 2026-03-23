@@ -171,6 +171,21 @@ export class DaySpeechPhase extends GamePhase {
     // Get situational strategy based on current game state
     const situationalStrategy = buildSituationalStrategy(state, player);
 
+    // Build seer good-player constraint (injected into systemParts for highest authority)
+    let seerGoodConstraint = "";
+    if (player.role === "Seer") {
+      const seerHistory = state.nightActions.seerHistory || [];
+      const goodSeats = seerHistory
+        .filter(r => !r.isWolf)
+        .map(r => r.targetSeat);
+      if (goodSeats.length > 0) {
+        const goodList = goodSeats
+          .map(seat => t("ui.seatNumber", { seat: seat + 1 }))
+          .join(t("common.listSeparator"));
+        seerGoodConstraint = t("prompts.daySpeech.roleHints.seerGoodConstraint", { goodList });
+      }
+    }
+
     const baseCacheable = t("prompts.daySpeech.base", {
       seat: player.seat + 1,
       name: player.displayName,
@@ -214,6 +229,7 @@ export class DaySpeechPhase extends GamePhase {
       { text: taskSection },
       { text: roleKnowHow },
       ...(situationalStrategy ? [{ text: situationalStrategy }] : []),
+      ...(seerGoodConstraint ? [{ text: seerGoodConstraint }] : []),
       { text: guidelinesSection, cacheable: true, ttl: "1h" },
     ];
     const system = buildSystemTextFromParts(systemParts);

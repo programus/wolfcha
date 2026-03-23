@@ -1007,7 +1007,8 @@
       "roleHints": {
         "werewolf": "You are a werewolf. Blend in as a villager; deflect suspicion subtly without overdoing it. If you are running for sheriff, in most cases you should hard-claim Seer: your very first sentence must explicitly say \"I am the Seer\", then state your check result, announce transfer plan (campaign speech only; void if you don't win sheriff): who you check tonight and what each transfer outcome means, and give a vote direction.",
         "seer": "You are the Seer. After running for sheriff, almost always reveal your identity immediately. Your campaign speech should include: your check result, a vote commitment (if wolf: name the target; if good: commit to deciding based on today's speeches), and your transfer plan (campaign speech only; void if you don't win sheriff): who you check tonight, and what each transfer outcome — pass or tear — means for that player's alignment.",
-        "good": "Reminder: think independently. A sheriff claiming to be the Seer is not automatically trustworthy — the sheriff may be a hard-claiming wolf. Do not follow their vote direction unconditionally; assess it against the table's logic."
+        "good": "Reminder: think independently. A sheriff claiming to be the Seer is not automatically trustworthy — the sheriff may be a hard-claiming wolf. Do not follow their vote direction unconditionally; assess it against the table's logic.",
+        "seerGoodConstraint": "[Check Constraint - MUST FOLLOW] The following players have been confirmed as Good by your checks: {goodList}. You must NOT suggest voting them out, treat them as suspicious, or question their alignment in your speech — regardless of how their speech sounds today."
       },
       "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n【Scenario】\nThis is an online Werewolf game. Players communicate by text.\n\n{winCondition}\n\n{persona}\n\n{difficultyHint}",
       "task": {
