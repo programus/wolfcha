@@ -112,7 +112,7 @@ export class DaySpeechPhase extends GamePhase {
     const sheriffSeat = state.badge.holderSeat;
     const isSheriffAlive = sheriffSeat !== null && 
       state.players.some((p) => p.seat === sheriffSeat && p.alive);
-    const fullSpeakingOrder = getSpeakingOrder(state, startSeat, isSheriffAlive);
+    const fullSpeakingOrder = getSpeakingOrder(state, startSeat, isSheriffAlive, state.speechDirection ?? "clockwise");
     
     // 根据发言顺序，找出当前玩家在顺序中的位置
     const playerIndex = fullSpeakingOrder.indexOf(player.seat);

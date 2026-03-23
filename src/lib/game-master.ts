@@ -522,7 +522,8 @@ export function getNextAliveSeat(
 export function getSpeakingOrder(
   state: GameState,
   startSeat: number,
-  sheriffLast = true
+  sheriffLast = true,
+  direction: "clockwise" | "counterclockwise" = "clockwise"
 ): number[] {
   const sheriffSeat = state.badge.holderSeat;
   const alivePlayers = state.players.filter((p) => p.alive);
@@ -534,10 +535,13 @@ export function getSpeakingOrder(
   const startIndex = aliveSeats.indexOf(startSeat);
   if (startIndex === -1) return aliveSeats;
   
-  // 从起始座位开始，按顺时针顺序排列
+  // 从起始座位开始，按指定方向排列
   const order: number[] = [];
   for (let i = 0; i < aliveSeats.length; i++) {
-    const seat = aliveSeats[(startIndex + i) % aliveSeats.length];
+    const idx = direction === "counterclockwise"
+      ? (startIndex - i + aliveSeats.length) % aliveSeats.length
+      : (startIndex + i) % aliveSeats.length;
+    const seat = aliveSeats[idx];
     // 如果警长最后发言，先跳过警长
     if (sheriffLast && seat === sheriffSeat) continue;
     order.push(seat);
