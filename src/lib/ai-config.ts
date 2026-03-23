@@ -37,10 +37,14 @@ export const GAME_TEMPERATURE = {
   // 玩家发言 (用户最关心的部分)
   SPEECH: AI_TEMPERATURE.CREATIVE,
   
-  // 玩家行动 (投票、技能)
-  // 稍微提高一点点(0.4)，让“蠢萌”或“冲动”角色的行为有概率出现，
+  // 玩家行动（技能：预言家查验、巫师用药、守卫守护、猎人开枪等）
+  // 稍微提高一点点(0.4)，让"蠢萌"或"冲动"角色的行为有概率出现，
   // 但主要还是依靠 Prompt 中的逻辑来驱动
   ACTION: AI_TEMPERATURE.LOGIC,
+
+  // 投票行动——比普通 ACTION 稍高，赋予 CoT analysis 更多多样性，
+  // 减轻近因偏差导致的集中归票现象
+  VOTE: 0.6,
 
   // Badge signup is an early-game "meta" decision; allow more variety.
   BADGE_SIGNUP: AI_TEMPERATURE.BALANCED,

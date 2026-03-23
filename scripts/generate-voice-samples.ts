@@ -40,7 +40,7 @@ async function synthesize(
   if (pitch) options.pitch = pitch;
   if (rate) options.rate = rate;
 
-  const communicate = new Communicate(text, options as Parameters<typeof Communicate>[1]);
+  const communicate = new Communicate(text, options as ConstructorParameters<typeof Communicate>[1]);
   const chunks: Buffer[] = [];
 
   await Promise.race([

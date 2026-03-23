@@ -1385,7 +1385,7 @@ export async function generateAIVote(
     result = await generateCompletion(mergeOptionsFromModelRef(player.agentProfile!.modelRef, {
       model: player.agentProfile!.modelRef.model,
       messages,
-      temperature: GAME_TEMPERATURE.ACTION,
+      temperature: GAME_TEMPERATURE.VOTE,
       response_format: { type: "json_object" },
     }));
 
@@ -1396,35 +1396,61 @@ export async function generateAIVote(
     let parsedResult: { seat: number; reason: string } | null = null;
     
     try {
-      const parsed = JSON.parse(cleaned) as { seat?: number; reason?: string };
-      const seat = typeof parsed.seat === "number" ? parsed.seat - 1 : NaN;
-      const validSeats = alivePlayers.map((p) => p.seat);
-      if (Number.isFinite(seat) && validSeats.includes(seat)) {
-        const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
-        parsedResult = { seat, reason: reason || t("gameMaster.voteFallback.missingReason") };
+      const parsed = JSON.parse(cleaned) as { seat?: number; reason?: string; analysis?: string };
+      const analysis = typeof parsed.analysis === "string" ? parsed.analysis.trim() : "";
+      const reasonField = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
+      if (parsed.seat === 0) {
+        // AI explicitly chose to abstain (seat 0 = abstain per prompt instructions)
+        parsedResult = { seat: VOTE_ABSTAIN, reason: analysis || reasonField || t("gameMaster.voteFallback.abstain") };
+      } else {
+        const seat = typeof parsed.seat === "number" ? parsed.seat - 1 : NaN;
+        const validSeats = alivePlayers.map((p) => p.seat);
+        if (Number.isFinite(seat) && validSeats.includes(seat)) {
+          // 优先用 analysis 作为 reason（更能反映推理过程），否则用 reason 字段
+          const reason = analysis || reasonField || t("gameMaster.voteFallback.missingReason");
+          parsedResult = { seat, reason };
+        }
       }
     } catch {
       // Fallback to regex parsing below
     }
 
     if (!parsedResult) {
-      const match = cleaned.match(/\d+/);
-      if (match) {
-        const seat = parseInt(match[0], 10) - 1;
-        const validSeats = alivePlayers.map((p) => p.seat);
-        if (validSeats.includes(seat)) {
-          parsedResult = { seat, reason: t("gameMaster.voteFallback.parseSeatOnly") };
+      // Target the "seat" field specifically to avoid matching numbers in analysis text
+      const seatMatch = cleaned.match(/"seat"\s*:\s*(\d+)/);
+      if (seatMatch) {
+        const seatRaw = parseInt(seatMatch[1], 10);
+        if (seatRaw === 0) {
+          parsedResult = { seat: VOTE_ABSTAIN, reason: t("gameMaster.voteFallback.abstain") };
+        } else {
+          const seat = seatRaw - 1;
+          const validSeats = alivePlayers.map((p) => p.seat);
+          if (validSeats.includes(seat)) {
+            parsedResult = { seat, reason: t("gameMaster.voteFallback.parseSeatOnly") };
+          }
         }
       }
     }
 
     if (!parsedResult) {
-      if (alivePlayers.length === 0) {
-        parsedResult = { seat: player.seat, reason: t("gameMaster.voteFallback.noTargets") };
-      } else {
-        const fallback = alivePlayers[Math.floor(Math.random() * alivePlayers.length)].seat;
-        parsedResult = { seat: fallback, reason: t("gameMaster.voteFallback.randomPick") };
+      // Last resort: take the last number in the response (least likely to be from analysis text)
+      const allNumbers = [...cleaned.matchAll(/\d+/g)];
+      if (allNumbers.length > 0) {
+        const lastRaw = parseInt(allNumbers[allNumbers.length - 1][0], 10);
+        if (lastRaw === 0) {
+          parsedResult = { seat: VOTE_ABSTAIN, reason: t("gameMaster.voteFallback.abstain") };
+        } else {
+          const seat = lastRaw - 1;
+          const validSeats = alivePlayers.map((p) => p.seat);
+          if (validSeats.includes(seat)) {
+            parsedResult = { seat, reason: t("gameMaster.voteFallback.parseSeatOnly") };
+          }
+        }
       }
+    }
+
+    if (!parsedResult) {
+      parsedResult = { seat: VOTE_ABSTAIN, reason: t("gameMaster.voteFallback.abstain") };
     }
 
     // Log with both raw and parsed data
@@ -1447,10 +1473,7 @@ export async function generateAIVote(
 
     return parsedResult;
   } catch (error) {
-    const fallbackResult = alivePlayers.length === 0
-      ? { seat: player.seat, reason: t("gameMaster.voteFallback.noTargets") }
-      : { seat: alivePlayers[Math.floor(Math.random() * alivePlayers.length)].seat, reason: t("gameMaster.voteFallback.randomPick") };
-    
+    const fallbackResult = { seat: VOTE_ABSTAIN, reason: t("gameMaster.voteFallback.abstain") };
     await aiLogger.log({
       type: "vote",
       request: {
@@ -1472,6 +1495,7 @@ export async function generateAIVote(
 
 /** Sentinel for abstain when AI fails to vote or parse. Counting logic skips -1 via aliveBySeat.has(seat). */
 export const BADGE_VOTE_ABSTAIN = -1;
+export const VOTE_ABSTAIN = -1;
 
 export const BADGE_TRANSFER_TORN = -1;
 
@@ -1705,9 +1729,26 @@ export async function generateAIBadgeVote(
       },
     });
 
-    const match = cleanedBadgeVote.match(/\d+/);
-    if (match) {
-      const seat = parseInt(match[0]) - 1;
+    let seatNum: number | null = null;
+    try {
+      const parsed = JSON.parse(cleanedBadgeVote);
+      if (typeof parsed.seat === "number") {
+        seatNum = parsed.seat;
+      }
+    } catch {
+      // Target the "seat" field specifically to avoid matching numbers in analysis text
+      const seatMatch = cleanedBadgeVote.match(/"seat"\s*:\s*(\d+)/);
+      if (seatMatch) {
+        seatNum = parseInt(seatMatch[1]);
+      } else {
+        // Last resort: take the last number in the response
+        const allNumbers = [...cleanedBadgeVote.matchAll(/\d+/g)];
+        if (allNumbers.length > 0) seatNum = parseInt(allNumbers[allNumbers.length - 1][0]);
+      }
+    }
+
+    if (seatNum !== null) {
+      const seat = seatNum - 1;
       const validSeats = alivePlayers.map((p) => p.seat);
       if (validSeats.includes(seat)) {
         return seat;

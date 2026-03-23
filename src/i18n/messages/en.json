@@ -694,7 +694,8 @@
     "waiting": "Waiting for votes...",
     "waitingLabel": "Waiting:",
     "youSuffix": " (you)",
-    "yourVote": "Your vote: Seat {seat} {name}"
+    "yourVote": "Your vote: Seat {seat} {name}",
+    "yourAbstain": "You abstained"
   },
   "persona": {
     "strategy": {
@@ -1044,11 +1045,11 @@
         "seer": "Hint: decide based on your check result"
       },
       "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n{winCondition}\n\n{difficultyHint}",
-      "task": "【Voting Rules】\nEach player votes to eliminate one suspect. Most votes = eliminated. Tie = PK speeches then revote.\n\n【Voting Strategy】\n- Stay consistent with your speech today\n- Consider all speeches, not just recent ones\n- Don't blindly follow sheriff's vote call - think independently\n- If lacking evidence, vote for vague or flip-flopping players\n\n【Task】\nChoose one player to eliminate. Only output the seat number.\n\nOptions: {options}\n\n{roleHints}",
+      "task": "【Voting Rules】\nEach player votes to eliminate one suspect. Most votes = eliminated. Tie = PK speeches then revote.\n\n【Voting Strategy】\n- Form your own judgment from the full discussion first, then decide whether to follow the sheriff's call\n- The sheriff spoke last — their view only reflects their own stance; a later speaking position does NOT give it extra weight; give every speech equal analytical consideration\n- Stay consistent with your own speech today; if your vote differs from your speech, you must explain why in the analysis field\n- Consider ALL speeches, not just recent ones\n- If lacking evidence, vote for vague or flip-flopping players\n\n【Output Format】\nReturn the following JSON with fields in this exact order:\n'{'\n  \"analysis\": \"First write your assessment of each player's speech today, then derive your vote target from that reasoning (50+ words)\",\n  \"seat\": <seat number>,\n  \"reason\": \"One sentence explaining your vote\"\n'}'\n\nOptions: {options}\nSpecial: seat 0 means abstain (strongly discouraged — only use if you truly cannot make any judgment)\n\n{roleHints}",
       "option": "Seat {seat} ({name})",
       "userNoTranscript": "(None)",
       "userNoSelfSpeech": "(You didn't speak today)",
-      "user": "{gameContext}\n\n【Today's discussion】\n{todayTranscript}\n\n【Your speech summary】\n\"{selfSpeech}\"\n\nWhich seat do you vote?\n\n【Format】\nReply with a seat number only, e.g., 3\nNo explanations, no extra text, no code blocks"
+      "user": "{gameContext}\n\n【Today's discussion】\n{todayTranscript}\n\n【Your speech summary】\n\"{selfSpeech}\"\n\nWrite your full reasoning in the analysis field first, then give your vote target."
     },
     "night": {
       "option": "Seat {seat} ({name})",
@@ -1102,11 +1103,11 @@
       },
       "election": {
         "base": "【Identity】\nYou are Seat {seat} \"{name}\"\nRole: {role}\n\n{winCondition}\n\n{difficultyHint}",
-        "task": "【Sheriff Badge】\nThe sheriff has 1.5 votes and can transfer the badge upon death. Choose someone who can lead well.\n\n【Task】\nSheriff election: choose a player to receive the badge.\n- Good team: prioritize players with useful info, clear logic, and leadership ability\n- Wolf team: prioritize wolf teammates or easily manipulated players\nConsider overall performance, not just the last speech.\nOnly output the seat number. No analysis or roleplay.\n\nOptions: {options}\n",
+        "task": "【Sheriff Badge】\nThe sheriff has 1.5 votes and can transfer the badge upon death. Choose someone who can lead well.\n\n【Evaluation Strategy】\n- Good team: prioritize players with useful info, clear logic, and leadership ability\n- Wolf team: prioritize wolf teammates or easily manipulated players\n- Consider ALL candidates' overall performance — a candidate speaking later may seem more polished due to recency, not actual quality; evaluate every candidate equally\n\n【Output Format】\nReturn the following JSON, in order:\n'{'\n  \"analysis\": \"First evaluate each candidate's campaign speech, then give your conclusion (30+ words)\",\n  \"seat\": <seat number>\n'}'\n\nOptions: {options}\n",
         "contextHeader": "Day {day} Sheriff election",
         "contextWolves": "Wolf teammates: {list}",
         "contextRecent": "Badge speeches:\n{text}",
-        "user": "{context}\n\nWhich seat do you vote for sheriff?\n\n【Format】\nReply with a seat number only, e.g., 3\nNo explanations, no extra text, no code blocks"
+        "user": "{context}\n\nFirst write your evaluation of each candidate in the 'analysis' field, then give your vote."
       },
       "transfer": {
         "roleHintWerewolf": "Hint: transfer to a wolf teammate or a controllable good player, or tear the badge",
@@ -1275,6 +1276,8 @@
     "badgeElectionInProgress": "Sheriff election in progress",
     "voteInProgress": "Voting in progress",
     "alreadyVotedFor": "You have voted for Seat {seat} {name}",
+    "voteAbstain": "Abstain",
+    "voteAbstainHint": "Abstaining does not count toward any player's vote total",
     "badgeSignupWaiting": "Counting sheriff candidates...",
     "emptyState": {
       "summoning": "Summoning",
@@ -2092,7 +2095,8 @@
       "missingReason": "No reason provided",
       "parseSeatOnly": "Parse failed - seat only",
       "noTargets": "No available targets",
-      "randomPick": "Random pick"
+      "randomPick": "Random pick",
+      "abstain": "Abstain"
     },
     "thinkingFilter": {
       "bracketOpen": "[",

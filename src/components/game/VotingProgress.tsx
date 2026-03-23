@@ -88,6 +88,21 @@ export function VotingProgress({ gameState, humanPlayer }: VotingProgressProps) 
         <AnimatePresence mode="popLayout" initial={false}>
           {humanPlayer && votes[humanPlayer.playerId] !== undefined ? (() => {
             const targetSeat = votes[humanPlayer.playerId];
+            if (targetSeat === -1) {
+              return (
+                <motion.div
+                  key="human-vote-abstain"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 px-2 py-1.5 bg-[var(--bg-hover)] rounded-lg border border-[var(--border-color)]"
+                >
+                  <CheckCircle size={14} weight="fill" className="text-[var(--text-muted)] shrink-0" />
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">
+                    {t("votingProgress.yourAbstain")}
+                  </span>
+                </motion.div>
+              );
+            }
             const target = gameState.players.find(p => p.seat === targetSeat);
             return (
               <motion.div

@@ -35,7 +35,7 @@ import { getI18n } from "@/i18n/translator";
 import { getSystemMessages, getSystemPatterns } from "@/lib/game-texts";
 import { useTranslations } from "next-intl";
 import { useAtom } from "jotai";
-import { BADGE_TRANSFER_TORN } from "@/lib/game-master";
+import { BADGE_TRANSFER_TORN, VOTE_ABSTAIN } from "@/lib/game-master";
 
 // Components
 import { WelcomeScreen } from "@/components/game/WelcomeScreen";
@@ -1203,6 +1203,10 @@ export default function Home() {
     }
   }, [selectedSeat, gameState.phase, handleHumanVote, handleHumanBadgeTransfer, handleNightAction, isRoleRevealOpen, humanPlayer, gameState.badge.holderSeat]);
 
+  const handleHumanAbstain = useCallback(async () => {
+    await handleHumanVote(VOTE_ABSTAIN);
+  }, [handleHumanVote]);
+
   const handleNightActionConfirm = useCallback(async (targetSeat: number, actionType?: "save" | "poison" | "pass") => {
     if (isRoleRevealOpen) return;
     await handleNightAction(targetSeat, actionType);
@@ -1611,6 +1615,7 @@ export default function Home() {
                       isWaitingForAI={isWaitingForAI}
                       onConfirmAction={confirmSelectedSeat}
                       onCancelSelection={() => setSelectedSeat(null)}
+                      onAbstainVote={handleHumanAbstain}
                       onNightAction={handleNightActionConfirm}
                       onBadgeSignup={handleBadgeSignup}
                       onRestart={restartGame}

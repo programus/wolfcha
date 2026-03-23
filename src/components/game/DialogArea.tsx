@@ -273,6 +273,7 @@ interface DialogAreaProps {
   isWaitingForAI?: boolean;
   onConfirmAction?: () => void;
   onCancelSelection?: () => void;
+  onAbstainVote?: () => void;
   onNightAction?: (seat: number, actionType?: WitchActionType) => void;
   onBadgeSignup?: (wants: boolean) => void;
   onRestart?: () => void;
@@ -392,6 +393,7 @@ export function DialogArea({
   isWaitingForAI = false,
   onConfirmAction,
   onCancelSelection,
+  onAbstainVote,
   onNightAction,
   onBadgeSignup,
   onRestart,
@@ -1069,6 +1071,13 @@ export function DialogArea({
   const showSpeechDirection = phase === "DAY_SPEECH_DIRECTION"
     && humanPlayer?.alive
     && humanPlayer?.seat === gameState.badge.holderSeat;
+  const showVoteAbstainOption =
+    phase === "DAY_VOTE" &&
+    !!humanPlayer?.alive &&
+    !(humanPlayer.role === "Idiot" && gameState.roleAbilities.idiotRevealed) &&
+    !((gameState.pkSource === "vote") && (gameState.pkTargets ?? []).includes(humanPlayer.seat)) &&
+    typeof gameState.votes[humanPlayer.playerId] !== "number" &&
+    selectedSeat === null;
   const showActionConfirm = (() => {
     const badgeCandidates = gameState.badge.candidates || [];
     const humanIsCandidate = humanPlayer && badgeCandidates.includes(humanPlayer.seat);
@@ -1112,6 +1121,7 @@ export function DialogArea({
     || showHunterPassOption
     || showWolfBlankKnifeOption
     || showSpeechDirection
+    || showVoteAbstainOption
     || showActionConfirm
     || showWitchPanel
     || showHumanInput
@@ -1452,6 +1462,33 @@ export function DialogArea({
 
                 return null;
               })()}
+
+              {/* 弃票选项（投票阶段，还未投票） */}
+              {showVoteAbstainOption && (
+                <motion.div
+                  key="vote-abstain"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <div className={`text-sm leading-relaxed mb-4 ${isNight ? "text-white/50" : "text-[var(--text-muted)]"}`}>
+                    {t("dialog.voteAbstainHint")}
+                  </div>
+                  <div className={`flex items-center justify-center pt-3 border-t ${isNight ? "border-white/10" : "border-black/5"}`}>
+                    <button
+                      onClick={onAbstainVote}
+                      className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all border ${
+                        isNight
+                          ? "text-white/40 border-white/10 hover:text-white/70 hover:border-white/25"
+                          : "text-[var(--text-muted)] border-[var(--border-color)] hover:text-[var(--text-secondary)] hover:border-[var(--text-muted)]"
+                      }`}
+                      type="button"
+                    >
+                      {t("dialog.voteAbstain")}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
 
               {/* 选择确认面板 - 文字形式 */}
               {(() => {

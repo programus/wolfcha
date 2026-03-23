@@ -36,6 +36,7 @@ import {
   generateWhiteWolfKingBoomDecision,
   generateAISpeechDirection,
   generateWolfConsultationStream,
+  VOTE_ABSTAIN,
 } from "@/lib/game-master";
 import { buildGenshinModelRefs, generateCharacters, generateGenshinModeCharacters, sampleModelRefs, type GeneratedCharacter } from "@/lib/character-generator";
 import { getSystemMessages, getUiText } from "@/lib/game-texts";
@@ -1827,8 +1828,10 @@ export function useGameLogic() {
 
     const baseState = baseState0;
     if (baseState.phase !== "DAY_VOTE" && baseState.phase !== "DAY_BADGE_ELECTION") return;
-    const targetPlayer = baseState.players.find((p) => p.seat === targetSeat);
-    if (!targetPlayer || !targetPlayer.alive) return;
+    if (targetSeat !== VOTE_ABSTAIN) {
+      const targetPlayer = baseState.players.find((p) => p.seat === targetSeat);
+      if (!targetPlayer || !targetPlayer.alive) return;
+    }
 
     if (baseState.phase === "DAY_BADGE_ELECTION") {
       if (typeof baseState.badge.votes?.[humanPlayer.playerId] === "number") return;
@@ -1854,7 +1857,7 @@ export function useGameLogic() {
     }
 
     if (typeof baseState.votes[humanPlayer.playerId] === "number") return;
-    if (baseState.pkSource === "vote" && Array.isArray(baseState.pkTargets) && baseState.pkTargets.length > 0) {
+    if (targetSeat !== VOTE_ABSTAIN && baseState.pkSource === "vote" && Array.isArray(baseState.pkTargets) && baseState.pkTargets.length > 0) {
       if (!baseState.pkTargets.includes(targetSeat)) {
         console.warn("[wolfcha] Vote target not in PK list");
         return;
