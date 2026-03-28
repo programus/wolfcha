@@ -382,6 +382,7 @@ function computeSeed(str: string): number {
 // circle Xvw radius = always a perfect circle regardless of container aspect ratio.
 // cy biased toward top (old msgs) via power distribution; bottom 20% stays clear.
 function buildHistoryOverlayBlobs(seed: number, msgCount: number, dayCount: number): string {
+  if (dayCount <= 1) return "";
   let s = seed;
   const rng = (): number => { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return (s >>> 0) / 2147483647; };
   // ~1.2 circles per message + 8 per past day, capped at 180
@@ -539,7 +540,7 @@ export function DialogArea({
   // Bucket msgCount to every 5 messages so the overlay only re-rasterizes
   // when content grows noticeably, not on every new message during streaming.
   const overlayBackground = useMemo(() => {
-    if (!isMemoryFadeEnabled) return undefined;
+    if (!isMemoryFadeEnabled || (gameState.day ?? 1) <= 1) return undefined;
     const bucketMsg = Math.floor(visibleMessages.length / 5) * 5;
     return buildHistoryOverlayBlobs(
       computeSeed(gameState.gameId || '0'),
