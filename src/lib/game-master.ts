@@ -1617,7 +1617,6 @@ export async function generateAIBadgeSignupBatch(
       model: getSummaryModel(),
       messages,
       temperature: GAME_TEMPERATURE.BADGE_SIGNUP,
-      response_format: { type: "json_object" },
     });
 
     const cleaned = stripMarkdownCodeFences(result.content).trim();
@@ -1639,9 +1638,15 @@ export async function generateAIBadgeSignupBatch(
       },
     });
 
-    // 解析 JSON 响应
+    // 解析 JSON 响应（支持 CoT 内心旁白 + 末尾 JSON 的混合格式）
+    // 优先取最后一个以 '{' 开头的行作为 JSON，向后兼容纯 JSON 输出。
+    const jsonStr = (() => {
+      const lines = cleaned.split('\n').map((l) => l.trim()).filter(Boolean);
+      const jsonLine = [...lines].reverse().find((l) => l.startsWith('{'));
+      return jsonLine ?? cleaned;
+    })();
     try {
-      const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+      const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
       
       // 支持多种响应格式
       // 格式1: { "decisions": { "1": true, "2": false, ... } }
