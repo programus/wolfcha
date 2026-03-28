@@ -29,8 +29,8 @@ export interface DayPhaseCallbacks {
   initStreamingSpeechQueue: (player: Player, afterSpeech?: (s: unknown) => Promise<void>) => void;
   appendToSpeechQueue: (segment: string) => void;
   finalizeSpeechQueue: (options?: { nextSpeakerIsAI?: boolean }) => void;
-  setPrefetchedSpeech: (prefetch: PrefetchedSpeech | null) => void;
-  createPrefetchCompletion: () => void;
+  setPrefetchedSpeech: (prefetch: PrefetchedSpeech | null, playerId?: string) => void;
+  createPrefetchCompletion: (playerId: string) => void;
   consumePrefetchedSpeech: (criteria: PrefetchCriteria) => string[] | null;
   getInProgressPrefetchPromise: (criteria: PrefetchCriteria) => Promise<string[]> | null;
   setAfterLastWords: (callback: ((s: GameState) => Promise<void>) | null) => void;
@@ -187,8 +187,17 @@ export function useDayPhase(
     };
 
     // 在 API 请求发出前先创建 completion promise，让 runAISpeech 可以 await （而不是发起第二次请求）
-    createPrefetchCompletion();
+    createPrefetchCompletion(player.playerId);
     setPrefetchedSpeech(basePrefetch);
+
+    // 提前解析好语音 ID，用于 TTS 预缓存
+    const locale = getLocale() as AppLocale;
+    const voiceId = resolveVoiceId(
+      player.agentProfile.persona?.voiceId,
+      player.agentProfile.persona?.gender,
+      player.agentProfile.persona?.age,
+      locale
+    );
 
     const collected: string[] = [];
 
@@ -201,6 +210,13 @@ export function useDayPhase(
             segments: [...collected],
             isComplete: false,
           });
+          // 文本生成后立即开始缓存 TTS 音频，enabled=false 时 prefetchTasks 内部会直接返回
+          audioManager.prefetchTasks([{
+            id: makeAudioTaskId(voiceId, segment),
+            text: segment,
+            voiceId,
+            playerId: player.playerId,
+          }], { concurrency: 1 }).catch(() => {});
         },
         onComplete: (finalSegments) => {
           setPrefetchedSpeech({
@@ -208,19 +224,28 @@ export function useDayPhase(
             segments: finalSegments,
             isComplete: true,
           });
+          // 链式预取：继续为再下一个 AI 玩家发起预取，直到遇到人类玩家或发言结束
+          const postState = buildPostSpeechState(state, player, finalSegments);
+          const { nextSeat, nextSpeakerIsAI } = resolveNextSpeaker(postState);
+          if (nextSeat !== null && nextSpeakerIsAI) {
+            const nextPlayer = postState.players.find((p) => p.seat === nextSeat);
+            if (nextPlayer && !nextPlayer.isHuman && nextPlayer.alive) {
+              void prefetchNextAISpeech(postState, nextPlayer);
+            }
+          }
         },
         onError: () => {
-          setPrefetchedSpeech(null);
+          setPrefetchedSpeech(null, player.playerId);
         },
       });
 
       if (segments.length === 0) {
-        setPrefetchedSpeech(null);
+        setPrefetchedSpeech(null, player.playerId);
       }
     } catch {
-      setPrefetchedSpeech(null);
+      setPrefetchedSpeech(null, player.playerId);
     }
-  }, [createPrefetchCompletion, setPrefetchedSpeech]);
+  }, [createPrefetchCompletion, setPrefetchedSpeech, buildPostSpeechState, resolveNextSpeaker]);
 
   /** AI 发言（流式分段输出） */
   const runAISpeech = useCallback(async (
@@ -307,7 +332,7 @@ export function useDayPhase(
 
       const waitedSegments = await inProgressPromise;
       // 清除 ref（prefetchCompletionRef 已由 setPrefetchedSpeech 自动清除）
-      setPrefetchedSpeech(null);
+      setPrefetchedSpeech(null, player.playerId);
 
       if (waitedSegments && waitedSegments.length > 0) {
         setIsWaitingForAI(false);

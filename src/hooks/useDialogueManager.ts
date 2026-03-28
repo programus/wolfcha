@@ -48,8 +48,8 @@ export function useDialogueManager() {
   const [isWaitingForAI, setIsWaitingForAI] = useState(false);
   const [waitingForNextRound, setWaitingForNextRound] = useState(false);
   const speechQueueRef = useRef<SpeechQueueState | null>(null);
-  const prefetchedSpeechRef = useRef<PrefetchedSpeech | null>(null);
-  const prefetchCompletionRef = useRef<{ promise: Promise<string[]>; resolve: (s: string[]) => void } | null>(null);
+  const prefetchedSpeechRef = useRef<Map<string, PrefetchedSpeech>>(new Map());
+  const prefetchCompletionRef = useRef<Map<string, { promise: Promise<string[]>; resolve: (s: string[]) => void }>>(new Map());
 
   /** 设置对话内容 */
   const setDialogue = useCallback((speaker: string, text: string, isStreaming = false) => {
@@ -225,55 +225,66 @@ export function useDialogueManager() {
   }, []);
 
   /** 创建预加载完成 Promise（在预取 API 调用发出前调用） */
-  const createPrefetchCompletion = useCallback(() => {
-    // 如果有未完成的旧 completion，先 resolve 掉（以 [] 代表放弃）
-    if (prefetchCompletionRef.current) {
-      prefetchCompletionRef.current.resolve([]);
+  const createPrefetchCompletion = useCallback((playerId: string) => {
+    // 如果该玩家已有未完成的旧 completion，先 resolve 掉（以 [] 代表放弃）
+    const existing = prefetchCompletionRef.current.get(playerId);
+    if (existing) {
+      existing.resolve([]);
     }
     let _resolve!: (segments: string[]) => void;
     const promise = new Promise<string[]>((res) => { _resolve = res; });
-    prefetchCompletionRef.current = { promise, resolve: _resolve };
+    prefetchCompletionRef.current.set(playerId, { promise, resolve: _resolve });
   }, []);
 
   /** 设置预加载发言缓存 */
-  const setPrefetchedSpeech = useCallback((prefetch: PrefetchedSpeech | null) => {
-    // Reject stale callbacks: if a newer prefetch is already stored, discard this update
-    if (prefetch !== null && prefetchedSpeechRef.current !== null && prefetch.createdAt < prefetchedSpeechRef.current.createdAt) {
-      return;
-    }
-    prefetchedSpeechRef.current = prefetch;
-    if (prefetch === null) {
-      // 出错或清除时，以空数组 resolve，解除所有等待者
-      if (prefetchCompletionRef.current) {
-        prefetchCompletionRef.current.resolve([]);
-        prefetchCompletionRef.current = null;
+  const setPrefetchedSpeech = useCallback((prefetch: PrefetchedSpeech | null, playerId?: string) => {
+    if (prefetch !== null) {
+      const key = prefetch.playerId;
+      // Reject stale callbacks: if a newer prefetch is already stored, discard this update
+      const existing = prefetchedSpeechRef.current.get(key);
+      if (existing && prefetch.createdAt < existing.createdAt) return;
+      prefetchedSpeechRef.current.set(key, prefetch);
+      if (prefetch.isComplete) {
+        // 完成时，以最终段落 resolve 对应玩家的 completion
+        const completion = prefetchCompletionRef.current.get(key);
+        if (completion) {
+          completion.resolve(prefetch.segments);
+          prefetchCompletionRef.current.delete(key);
+        }
       }
-    } else if (prefetch.isComplete) {
-      // 完成时，以最终段落 resolve
-      if (prefetchCompletionRef.current) {
-        prefetchCompletionRef.current.resolve(prefetch.segments);
-        prefetchCompletionRef.current = null;
+    } else if (playerId) {
+      // 指定玩家出错或清除时，仅清除该玩家的缓存
+      prefetchedSpeechRef.current.delete(playerId);
+      const completion = prefetchCompletionRef.current.get(playerId);
+      if (completion) {
+        completion.resolve([]);
+        prefetchCompletionRef.current.delete(playerId);
       }
+    } else {
+      // 全量清除（用于重置）
+      prefetchCompletionRef.current.forEach((c) => c.resolve([]));
+      prefetchedSpeechRef.current.clear();
+      prefetchCompletionRef.current.clear();
     }
   }, []);
 
   /** 消费预加载发言缓存（匹配元数据后清除） */
   const consumePrefetchedSpeech = useCallback((criteria: PrefetchCriteria) => {
-    const prefetch = prefetchedSpeechRef.current;
+    const prefetch = prefetchedSpeechRef.current.get(criteria.playerId);
     if (!prefetch) return null;
 
     const matches =
-      prefetch.playerId === criteria.playerId &&
       prefetch.phase === criteria.phase &&
       prefetch.day === criteria.day &&
       criteria.messageCount >= prefetch.messageCount;
 
     if (!matches) {
-      prefetchedSpeechRef.current = null;
+      prefetchedSpeechRef.current.delete(criteria.playerId);
       // 同时丢弃不再相关的 completion promise
-      if (prefetchCompletionRef.current) {
-        prefetchCompletionRef.current.resolve([]);
-        prefetchCompletionRef.current = null;
+      const completion = prefetchCompletionRef.current.get(criteria.playerId);
+      if (completion) {
+        completion.resolve([]);
+        prefetchCompletionRef.current.delete(criteria.playerId);
       }
       return null;
     }
@@ -282,24 +293,23 @@ export function useDialogueManager() {
       return null; // 正在进行中，调用方可通过 getInProgressPrefetchPromise 等待
     }
 
-    prefetchedSpeechRef.current = null;
+    prefetchedSpeechRef.current.delete(criteria.playerId);
     return prefetch.segments;
   }, []);
 
   /** 获取正在进行中的预取 Promise（若匹配条件则返回，否则返回 null） */
   const getInProgressPrefetchPromise = useCallback((criteria: PrefetchCriteria): Promise<string[]> | null => {
-    const prefetch = prefetchedSpeechRef.current;
+    const prefetch = prefetchedSpeechRef.current.get(criteria.playerId);
     if (!prefetch || prefetch.isComplete) return null;
 
     const matches =
-      prefetch.playerId === criteria.playerId &&
       prefetch.phase === criteria.phase &&
       prefetch.day === criteria.day &&
       criteria.messageCount >= prefetch.messageCount;
 
     if (!matches) return null;
 
-    return prefetchCompletionRef.current?.promise ?? null;
+    return prefetchCompletionRef.current.get(criteria.playerId)?.promise ?? null;
   }, []);
 
   /** 重置所有对话状态 */
@@ -308,11 +318,9 @@ export function useDialogueManager() {
     setIsWaitingForAI(false);
     setWaitingForNextRound(false);
     speechQueueRef.current = null;
-    prefetchedSpeechRef.current = null;
-    if (prefetchCompletionRef.current) {
-      prefetchCompletionRef.current.resolve([]);
-      prefetchCompletionRef.current = null;
-    }
+    prefetchCompletionRef.current.forEach((c) => c.resolve([]));
+    prefetchedSpeechRef.current.clear();
+    prefetchCompletionRef.current.clear();
   }, []);
 
   /** 检查下一个发言者是否是AI（用于自动推进时减少延迟） */
