@@ -158,6 +158,11 @@ export const buildSituationalStrategy = (state: GameState, player: Player): stri
     }
   }
 
+  // Day 1 universal reminder: first-night kills and seer checks are random choices with no deducible strategy
+  if (state.day === 1) {
+    pushTips(t.raw("promptUtils.situationalStrategy.day1DeathNote") as string);
+  }
+
   return lines.join("\n");
 };
 
