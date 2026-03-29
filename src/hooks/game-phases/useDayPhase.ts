@@ -80,9 +80,12 @@ export function useDayPhase(
     segments: string[]
   ): GameState => {
     const normalized = segments.map((segment) => segment.trim()).filter((segment) => segment.length > 0);
+    // 更新 currentSpeakerSeat，使 resolveNextSpeaker 能正确计算下一位发言者。
+    // 若不更新，currentSpeakerSeat 会一直卡在上上位玩家，导致链式预取无限重复预取同一个玩家。
+    const withSpeaker: GameState = { ...baseState, currentSpeakerSeat: speaker.seat };
     return normalized.reduce((nextState, segment) => {
       return addPlayerMessage(nextState, speaker.playerId, segment);
-    }, baseState);
+    }, withSpeaker);
   }, []);
 
 
@@ -308,16 +311,7 @@ export function useDayPhase(
       } catch {
         // ignore tts prefetch errors
       }
-
-      // 链式预取：B 的内容已确定，立即为 C 发起预取，无需等待 B 显示结束
-      const postSpeechStateA = buildPostSpeechState(state, player, prefetchedSegments);
-      const { nextSeat: nextSeatA, nextSpeakerIsAI: nextIsAIA } = resolveNextSpeaker(postSpeechStateA);
-      if (nextSeatA !== null && nextIsAIA) {
-        const nextPlayerA = postSpeechStateA.players.find((p) => p.seat === nextSeatA);
-        if (nextPlayerA && !nextPlayerA.isHuman && nextPlayerA.alive) {
-          void prefetchNextAISpeech(postSpeechStateA, nextPlayerA);
-        }
-      }
+      // 链式预取由 prefetchNextAISpeech 的 onComplete 统一负责，此处不重复触发
 
       currentSpeakingPlayerRef.current = null;
       return;
@@ -356,16 +350,7 @@ export function useDayPhase(
         } catch {
           // ignore tts prefetch errors
         }
-
-        // 链式预取：B 的内容已确定，立即为 C 发起预取
-        const postSpeechStateB = buildPostSpeechState(state, player, waitedSegments);
-        const { nextSeat: nextSeatB, nextSpeakerIsAI: nextIsAIB } = resolveNextSpeaker(postSpeechStateB);
-        if (nextSeatB !== null && nextIsAIB) {
-          const nextPlayerB = postSpeechStateB.players.find((p) => p.seat === nextSeatB);
-          if (nextPlayerB && !nextPlayerB.isHuman && nextPlayerB.alive) {
-            void prefetchNextAISpeech(postSpeechStateB, nextPlayerB);
-          }
-        }
+        // 链式预取由 prefetchNextAISpeech 的 onComplete 统一负责，此处不重复触发
 
         currentSpeakingPlayerRef.current = null;
         return;
