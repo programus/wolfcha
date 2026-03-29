@@ -4,6 +4,8 @@
  * 头像配置规则：
  * - 发型共 63 个变量 (variant01 - variant63)
  * - 嘴型共 30 个变量 (variant01 - variant30)
+ * - 身体共 25 个变量 (variant01 - variant25)
+ * - 眉毛共 13 个变量 (variant01 - variant13)
  */
 
 import type { ModelRef } from "@/types/game";
@@ -14,10 +16,17 @@ import { getModelLogoPath } from "./model-logo";
 // 发型配置 (Hair)
 // ============================================
 
-// 长发变量 - 仅供女性使用
+// 不使用的发型变体（视觉效果不佳）
+const EXCLUDED_HAIR: readonly string[] = [
+  "variant29", // 短波波头（不采用）
+  "variant59", // 不采用
+] as const;
+
+// 女性专属发型：长发、卷发、带发饰类
 const FEMALE_ONLY_HAIR: readonly string[] = [
   "variant02",
   "variant04",
+  "variant08", // 长卷发（垂肩）
   "variant10",
   "variant20",
   "variant23",
@@ -25,22 +34,63 @@ const FEMALE_ONLY_HAIR: readonly string[] = [
   "variant30",
   "variant36",
   "variant37",
+  "variant39", // 带发饰/头带
+  "variant41",
   "variant45",
   "variant46",
   "variant47",
-  "variant41"
+  "variant57", // 丸子头/盘发
+  "variant62", // 包头布
+  "variant63", // 深色包头
 ] as const;
 
-// 生成所有发型变量 (1-63)
+// 生成所有发型变量 (1-63)，排除不使用的变体
 const ALL_HAIR_VARIANTS: string[] = Array.from(
   { length: 63 },
   (_, i) => `variant${String(i + 1).padStart(2, "0")}`
-);
+).filter((v) => !EXCLUDED_HAIR.includes(v));
 
-// 非长发变量 - 供男性/非二元使用
+// 男性/非二元发型：排除女性专属
 const NON_FEMALE_HAIR: string[] = ALL_HAIR_VARIANTS.filter(
   (v) => !FEMALE_ONLY_HAIR.includes(v)
 );
+
+// ============================================
+// 身体/服装配置 (Body) - 25种
+// ============================================
+
+// 女性偏向服装：柔和、休闲、图案装饰类
+const FEMALE_BODY: readonly string[] = [
+  "variant01", "variant02", "variant03", "variant04", "variant05",
+  "variant10", "variant11", "variant12", "variant15",
+  "variant21", "variant22", "variant23", "variant24",
+] as const;
+
+// 男性偏向服装：西装、领带、正装、马甲类
+const MALE_BODY: readonly string[] = [
+  "variant01", "variant02", "variant03", "variant04", "variant05",
+  "variant06", "variant07", "variant08", "variant09",
+  "variant13", "variant14", "variant16", "variant17",
+  "variant18", "variant19", "variant20", "variant25",
+] as const;
+
+// ============================================
+// 眉毛配置 (Brows) - 13种
+// ============================================
+
+// 女性偏向眉毛：细、拱形、精致
+const FEMALE_BROWS: readonly string[] = [
+  "variant01", "variant04", "variant06",
+  "variant08", "variant09", "variant10",
+  "variant11", "variant12", "variant13",
+] as const;
+
+// 男性偏向眉毛：粗重、平直、倾斜
+const MALE_BROWS: readonly string[] = [
+  "variant01", "variant02", "variant03",
+  "variant05", "variant06", "variant07",
+  "variant09", "variant13",
+] as const;
 
 // ============================================
 // 嘴型配置 (Lips)
@@ -115,6 +165,31 @@ export function getAvatarBgColor(seed: string): string {
 }
 
 /**
+ * 根据性别获取可用的身体/服装变量
+ */
+export function getBodyForSeed(seed: string, gender: Gender): string {
+  const pool = gender === "female" ? FEMALE_BODY : MALE_BODY;
+  return pool[hashString(seed) % pool.length];
+}
+
+/**
+ * 根据性别获取可用的眉毛变量
+ */
+export function getBrowsForSeed(seed: string, gender: Gender): string {
+  const pool = gender === "female" ? FEMALE_BROWS : MALE_BROWS;
+  return pool[hashString(seed) % pool.length];
+}
+
+/**
+ * 根据性别获取胡须概率
+ */
+export function getBeardProbability(gender: Gender): number {
+  if (gender === "female") return 0;
+  if (gender === "nonbinary") return 5;
+  return 20; // male
+}
+
+/**
  * 根据性别获取可用的发型列表
  */
 export function getHairVariantsForGender(gender: Gender): string[] {
@@ -166,6 +241,8 @@ export interface AvatarUrlOptions {
   eyes?: string;
   lips?: string;
   hair?: string;
+  body?: string;
+  brows?: string;
   scale?: number;
   translateY?: number;
   backgroundColor?: string | "transparent";
@@ -181,6 +258,8 @@ export function buildAvatarUrl(options: AvatarUrlOptions): string {
     eyes,
     lips,
     hair,
+    body,
+    brows,
     scale = 100,
     translateY = 0,
     backgroundColor,
@@ -219,10 +298,22 @@ export function buildAvatarUrl(options: AvatarUrlOptions): string {
     params.set("lips", lips);
   }
 
-  // 胡子概率 - 女性角色设置为 0 防止出现胡子
- 
-  params.set("beardProbability", "0");
-  
+  // 身体/服装 - 根据性别选择候选池
+  if (body) {
+    params.set("body", body);
+  } else if (gender) {
+    params.set("body", getBodyForSeed(seed, gender));
+  }
+
+  // 眉毛 - 根据性别选择候选池
+  if (brows) {
+    params.set("brows", brows);
+  } else if (gender) {
+    params.set("brows", getBrowsForSeed(seed, gender));
+  }
+
+  // 胡子概率 - 按性别设置（女性=0，男性=20，非二元=5）
+  params.set("beardProbability", String(gender ? getBeardProbability(gender) : 0));
 
   return `https://api.dicebear.com/7.x/notionists/svg?${params.toString()}`;
 }
@@ -269,6 +360,10 @@ export const AvatarConfig = {
   FEMALE_ONLY_HAIR,
   NON_FEMALE_HAIR,
   ALL_HAIR_VARIANTS,
+  FEMALE_BODY,
+  MALE_BODY,
+  FEMALE_BROWS,
+  MALE_BROWS,
   TALKING_LIPS,
   IDLE_LIPS,
   FORBIDDEN_LIPS,
