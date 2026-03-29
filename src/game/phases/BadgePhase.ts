@@ -75,7 +75,7 @@ export class BadgePhase extends GamePhase {
     const system = buildSystemTextFromParts(systemParts);
 
     const seatByPlayerId = new Map(state.players.map((p) => [p.playerId, p.seat] as const));
-    const badgeSpeechText = state.messages
+    const filteredMessages = state.messages
       .filter((m) => m.day === state.day)
       .filter((m) => !m.isSystem)
       .filter((m) => m.phase === "DAY_BADGE_SPEECH" || m.phase === "DAY_PK_SPEECH")
@@ -83,9 +83,27 @@ export class BadgePhase extends GamePhase {
         if (candidateSet.size === 0) return true;
         const seat = seatByPlayerId.get(m.playerId);
         return typeof seat === "number" && candidateSet.has(seat);
-      })
-      .map((m) => `${m.playerName}: ${m.content}`)
-      .join("\n");
+      });
+
+    // 按候选人分组，然后随机打乱候选人顺序，消除 LLM 近因偏差（recency bias）
+    // 若每次都按发言时间顺序呈现，最后发言的候选人会因靠近投票指令而被过度青睐
+    const speechByPlayerId = new Map<string, typeof filteredMessages>();
+    const orderedPlayerIds: string[] = [];
+    for (const m of filteredMessages) {
+      if (!speechByPlayerId.has(m.playerId)) {
+        speechByPlayerId.set(m.playerId, []);
+        orderedPlayerIds.push(m.playerId);
+      }
+      speechByPlayerId.get(m.playerId)!.push(m);
+    }
+    const shuffledPlayerIds = [...orderedPlayerIds].sort(() => Math.random() - 0.5);
+    const badgeSpeechText = shuffledPlayerIds
+      .map((pid) =>
+        speechByPlayerId.get(pid)!
+          .map((m) => `${m.playerName}: ${m.content}`)
+          .join("\n")
+      )
+      .join("\n---\n");
 
     const liteContextLines = [
       t("prompts.badge.election.contextHeader", { day: state.day }),
